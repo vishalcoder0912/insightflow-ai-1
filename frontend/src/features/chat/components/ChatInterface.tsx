@@ -1,50 +1,131 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, User } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Sparkles, User, AlertCircle, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { useDataset } from "@/shared/data/DataContext";
 import { chatApi } from "@/shared/services/api";
 import type { DatasetChart } from "@/shared/types/dataset";
 
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  isError?: boolean;       // FIX #7 — distinguish error bubbles visually
   sql?: string;
   chart?: DatasetChart | null;
 }
 
+// ─── Stable ID generator (avoids Date.now() collision) ─────────────────────────
+
+let _counter = 0;
+const uid = () => `msg-${Date.now()}-${++_counter}`;
+
+// ─── Welcome message factory (dataset-aware) ────────────────────────────────────
+
+const buildWelcome = (hasDataset: boolean): Message => ({
+  id: "welcome",
+  role: "assistant",
+  content: hasDataset
+    ? "Dataset loaded. Ask me anything about your data.\n\nTry: *\"What are the top 5 products by revenue?\"*"
+    : "Welcome to **InsightFlow AI**. Upload a dataset and ask a question about it.\n\nTry: *\"What are the top 5 products by revenue?\"*",
+});
+
+// ─── Chart renderer ─────────────────────────────────────────────────────────────
+
+function ChartPreview({ chart }: { chart: DatasetChart }) {
+  // Renders a simple bar-style preview so the chart data is actually visible.
+  // Swap this out for Recharts / Chart.js if a full chart library is available.
+  const max = Math.max(...chart.data.map((d) => Number(d.value) || 0));
+
+  return (
+    <div className="mt-3 rounded-md border border-border p-3 space-y-2">
+      <p className="text-xs font-medium text-foreground">{chart.title}</p>
+      <p className="text-xs text-muted-foreground capitalize">{chart.type} chart · {chart.data.length} data points</p>
+      <div className="space-y-1.5 mt-2">
+        {chart.data.slice(0, 8).map((point, i) => {
+          const pct = max > 0 ? (Number(point.value) / max) * 100 : 0;
+          return (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground w-24 truncate shrink-0">{String(point.label ?? point.x ?? i)}</span>
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground w-12 text-right shrink-0">{point.value}</span>
+            </div>
+          );
+        })}
+        {chart.data.length > 8 && (
+          <p className="text-xs text-muted-foreground">+{chart.data.length - 8} more rows</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ─────────────────────────────────────────────────────────────
+
 export default function ChatInterface() {
   const { dataset } = useDataset();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Welcome to **InsightFlow AI**. Upload a dataset and ask a question about it.\n\nTry: *\"What are the top 5 products by revenue?\"*",
-    },
-  ]);
+
+  // FIX #6 — welcome message reflects whether a dataset is already loaded
+  const [messages, setMessages] = useState<Message[]>(() => [buildWelcome(!!dataset)]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // FIX #5 — point ref at the bottom sentinel, not the scroll container
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Scroll to bottom whenever messages change
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
-  const handleSend = async () => {
+  // FIX #6 — update welcome message when dataset availability changes
+  useEffect(() => {
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].id === "welcome") {
+        return [buildWelcome(!!dataset)];
+      }
+      return prev;
+    });
+  }, [dataset]);
+
+  // ── Reset chat ─────────────────────────────────────────────────────────────
+
+  const handleReset = useCallback(() => {
+    setMessages([buildWelcome(!!dataset)]);
+    setInput("");
+    inputRef.current?.focus();
+  }, [dataset]);
+
+  // ── Send message ───────────────────────────────────────────────────────────
+
+  const handleSend = useCallback(async () => {
+    // FIX #3 — unified guard used by both button and Enter key
     if (!dataset || !input.trim() || isLoading) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: input };
+    const userMsg: Message = { id: uid(), role: "user", content: input.trim() };
+
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const resp = await chatApi.send(userMsg.content);
+      // FIX #1 — pass dataset so API has context
+      // FIX #4 — pass full conversation history for multi-turn memory
+      const history = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
+      const resp = await chatApi.send(userMsg.content, dataset, history);
+
       setMessages((prev) => [
         ...prev,
         {
-          id: (Date.now() + 1).toString(),
+          id: uid(),
           role: "assistant",
           content: resp.answer,
           sql: resp.sql,
@@ -52,19 +133,36 @@ export default function ChatInterface() {
         },
       ]);
     } catch (error) {
+      // FIX #7 — error messages are flagged separately so UI can style them
       const message = error instanceof Error ? error.message : "Chat request failed.";
       setMessages((prev) => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: "assistant", content: message },
+        { id: uid(), role: "assistant", content: message, isError: true },
       ]);
     } finally {
       setIsLoading(false);
+      inputRef.current?.focus();
     }
-  };
+  }, [dataset, input, isLoading, messages]);
+
+  // ── Enter key handler ──────────────────────────────────────────────────────
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      // FIX #3 — respect all disabled conditions before firing
+      if (e.key === "Enter" && !e.shiftKey && dataset && input.trim() && !isLoading) {
+        void handleSend();
+      }
+    },
+    [handleSend, dataset, input, isLoading],
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
-      <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
+      {/* ── Message list ── */}
+      <div className="flex-1 overflow-auto p-4 space-y-4">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
@@ -73,16 +171,30 @@ export default function ChatInterface() {
               animate={{ opacity: 1, y: 0 }}
               className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
             >
+              {/* Assistant avatar */}
               {msg.role === "assistant" && (
-                <div className="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <div
+                  className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${
+                    msg.isError ? "bg-destructive/15" : "bg-primary/15"
+                  }`}
+                >
+                  {msg.isError ? (
+                    <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  )}
                 </div>
               )}
+
+              {/* Bubble */}
               <div
                 className={`max-w-[75%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-card card-elevated text-card-foreground"
+                    : msg.isError
+                      // FIX #7 — error bubbles get distinct destructive styling
+                      ? "bg-destructive/10 border border-destructive/20 text-destructive"
+                      : "bg-card card-elevated text-card-foreground"
                 }`}
               >
                 <ReactMarkdown
@@ -97,21 +209,20 @@ export default function ChatInterface() {
                 >
                   {msg.content}
                 </ReactMarkdown>
+
+                {/* SQL block */}
                 {msg.sql && (
                   <div className="mt-3 bg-muted rounded-md p-3">
                     <p className="text-xs text-muted-foreground mb-1 font-medium">Generated SQL</p>
-                    <pre className="text-xs font-mono text-primary overflow-x-auto">{msg.sql}</pre>
+                    <pre className="text-xs font-mono text-primary overflow-x-auto whitespace-pre-wrap">{msg.sql}</pre>
                   </div>
                 )}
-                {msg.chart && (
-                  <div className="mt-3 rounded-md border border-border p-3">
-                    <p className="text-xs font-medium text-foreground">{msg.chart.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Suggested {msg.chart.type} chart with {msg.chart.data.length} data points.
-                    </p>
-                  </div>
-                )}
+
+                {/* FIX #9 — render actual chart preview instead of just describing it */}
+                {msg.chart && <ChartPreview chart={msg.chart} />}
               </div>
+
+              {/* User avatar */}
               {msg.role === "user" && (
                 <div className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center shrink-0 mt-0.5">
                   <User className="w-3.5 h-3.5 text-secondary-foreground" />
@@ -120,6 +231,8 @@ export default function ChatInterface() {
             </motion.div>
           ))}
         </AnimatePresence>
+
+        {/* Typing indicator */}
         {isLoading && (
           <div className="flex gap-3">
             <div className="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
@@ -128,28 +241,57 @@ export default function ChatInterface() {
             <div className="bg-card card-elevated rounded-lg px-4 py-3">
               <div className="flex gap-1">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse"
+                    style={{ animationDelay: `${i * 200}ms` }}
+                  />
                 ))}
               </div>
             </div>
           </div>
         )}
+
+        {/* FIX #5 — bottom sentinel for reliable scroll-to-bottom */}
+        <div ref={bottomRef} />
       </div>
 
+      {/* ── Input bar ── */}
       <div className="p-4 border-t border-border">
         <div className="flex gap-2">
+          {/* FIX #8 — reset / new chat button */}
+          {messages.length > 1 && (
+            <button
+              onClick={handleReset}
+              disabled={isLoading}
+              title="Reset chat"
+              className="rounded-lg border border-border bg-card px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+
           <input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void handleSend()}
-            placeholder={dataset ? "Ask about your data..." : "Upload a dataset before asking questions"}
-            disabled={!dataset}
-            className="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={handleKeyDown}
+            placeholder={
+              dataset
+                ? "Ask about your data…"
+                : "Upload a dataset before asking questions"
+            }
+            disabled={!dataset || isLoading}
+            // FIX #10 — tooltip on disabled state
+            title={!dataset ? "Upload a dataset first to start chatting" : undefined}
+            className="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
           />
+
           <button
             onClick={() => { void handleSend(); }}
             disabled={!dataset || !input.trim() || isLoading}
-            className="bg-primary text-primary-foreground rounded-lg px-4 py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40"
+            title={!dataset ? "Upload a dataset first" : "Send message"}
+            className="bg-primary text-primary-foreground rounded-lg px-4 py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Send className="w-4 h-4" />
           </button>
