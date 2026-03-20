@@ -56,17 +56,20 @@ export default function UploadPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-            isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-          }`}
         >
-          <input {...getInputProps()} />
-          <Upload className={`w-10 h-10 mx-auto mb-4 ${isDragActive ? "text-primary" : "text-muted-foreground"}`} />
-          <p className="text-sm text-foreground font-medium">
-            {isDragActive ? "Drop your file here" : "Drag & drop a CSV file, or click to browse"}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">Max 20MB · CSV format only</p>
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
+              isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
+            }`}
+          >
+            <input {...getInputProps()} />
+            <Upload className={`w-10 h-10 mx-auto mb-4 ${isDragActive ? "text-primary" : "text-muted-foreground"}`} />
+            <p className="text-sm text-foreground font-medium">
+              {isDragActive ? "Drop your file here" : "Drag & drop a CSV file, or click to browse"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Max 20MB · CSV format only</p>
+          </div>
         </motion.div>
       ) : (
         <AnimatePresence>
