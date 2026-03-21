@@ -23,12 +23,21 @@ export const uploadDatasetController = async (req, res) => {
     return;
   }
 
-  const dataset = await storeDataset({
-    csv: body.csv,
-    fileName: body.fileName || "dataset.csv",
-  });
+  try {
+    const dataset = await storeDataset({
+      csv: body.csv,
+      fileName: body.fileName || "dataset.csv",
+    });
 
-  json(res, 201, dataset);
+    json(res, 201, dataset);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to parse CSV.";
+    if (message.toLowerCase().includes("csv must include")) {
+      json(res, 400, { error: message });
+      return;
+    }
+    json(res, 500, { error: "Failed to upload dataset." });
+  }
 };
 
 export const deleteCurrentDatasetController = async (_req, res) => {

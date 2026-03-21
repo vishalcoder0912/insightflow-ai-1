@@ -53,7 +53,16 @@ const parseGeminiResponse = (payload) => {
     };
   }
 
-  return JSON.parse(match[0]);
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return {
+      answer: text,
+      sql: "",
+      insights: [],
+      chart: null,
+    };
+  }
 };
 
 const generateFallback = ({ dataset, question }) => {

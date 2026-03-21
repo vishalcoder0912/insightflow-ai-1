@@ -76,6 +76,7 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>(() => [buildWelcome(!!dataset)]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [openSql, setOpenSql] = useState<Record<string, boolean>>({});
 
   // FIX #5 — point ref at the bottom sentinel, not the scroll container
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -101,6 +102,7 @@ export default function ChatInterface() {
   const handleReset = useCallback(() => {
     setMessages([buildWelcome(!!dataset)]);
     setInput("");
+    setOpenSql({});
     inputRef.current?.focus();
   }, [dataset]);
 
@@ -188,13 +190,13 @@ export default function ChatInterface() {
 
               {/* Bubble */}
               <div
-                className={`max-w-[75%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                className={`max-w-[75%] px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl"
                     : msg.isError
                       // FIX #7 — error bubbles get distinct destructive styling
-                      ? "bg-destructive/10 border border-destructive/20 text-destructive"
-                      : "bg-card card-elevated text-card-foreground"
+                      ? "bg-destructive/10 border border-destructive/20 text-destructive rounded-tr-2xl rounded-br-2xl rounded-tl-2xl"
+                      : "bg-card card-elevated text-card-foreground rounded-tr-2xl rounded-br-2xl rounded-tl-2xl"
                 }`}
               >
                 <ReactMarkdown
@@ -212,9 +214,19 @@ export default function ChatInterface() {
 
                 {/* SQL block */}
                 {msg.sql && (
-                  <div className="mt-3 bg-muted rounded-md p-3">
-                    <p className="text-xs text-muted-foreground mb-1 font-medium">Generated SQL</p>
-                    <pre className="text-xs font-mono text-primary overflow-x-auto whitespace-pre-wrap">{msg.sql}</pre>
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setOpenSql((prev) => ({ ...prev, [msg.id]: !prev[msg.id] }))}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {openSql[msg.id] ? "Hide SQL" : "Show SQL"}
+                    </button>
+                    {openSql[msg.id] && (
+                      <div className="mt-2 bg-muted rounded-md p-3">
+                        <p className="text-xs text-muted-foreground mb-1 font-medium">Generated SQL</p>
+                        <pre className="text-xs font-mono text-primary overflow-x-auto whitespace-pre-wrap">{msg.sql}</pre>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -238,13 +250,13 @@ export default function ChatInterface() {
             <div className="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
               <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse-glow" />
             </div>
-            <div className="bg-card card-elevated rounded-lg px-4 py-3">
+            <div className="bg-card card-elevated rounded-tr-2xl rounded-br-2xl rounded-tl-2xl px-4 py-3">
               <div className="flex gap-1">
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse"
-                    style={{ animationDelay: `${i * 200}ms` }}
+                    className="typing-dot"
+                    style={{ animationDelay: `${i * 150}ms` }}
                   />
                 ))}
               </div>
@@ -300,3 +312,6 @@ export default function ChatInterface() {
     </div>
   );
 }
+
+
+

@@ -33,9 +33,9 @@ export const datasetApi = {
 };
 
 export const chatApi = {
-  send: (message: string, dataset: DatasetRecord, history: { role: "user" | "assistant"; content: string; }[]) =>
+  send: (message: string, _dataset: DatasetRecord, history: { role: "user" | "assistant"; content: string }[]) =>
     request<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, history }),
     }),
 };

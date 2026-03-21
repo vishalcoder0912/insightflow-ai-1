@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { LayoutDashboard, Upload, MessageSquare, Sparkles, Database } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDataset } from "@/shared/data/DataContext";
+import { cn } from "@/shared/lib/utils";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -9,7 +10,12 @@ const navItems = [
   { to: "/chat", icon: MessageSquare, label: "AI Chat" },
 ];
 
-export default function AppSidebar() {
+interface AppSidebarProps {
+  className?: string;
+  onNavigate?: () => void;
+}
+
+export default function AppSidebar({ className, onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const { dataset } = useDataset();
   const datasetSummary =
@@ -18,12 +24,12 @@ export default function AppSidebar() {
       : "No dataset loaded";
 
   return (
-    <aside className="w-16 lg:w-56 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0">
+    <aside className={cn("w-64 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0", className)}>
       <div className="h-14 flex items-center gap-2.5 px-4 border-b border-sidebar-border">
         <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
           <Sparkles className="w-4 h-4 text-primary" />
         </div>
-        <span className="hidden lg:block text-sm font-semibold text-foreground tracking-tight">
+        <span className="text-sm font-semibold text-foreground tracking-tight">
           InsightFlow AI
         </span>
       </div>
@@ -35,6 +41,7 @@ export default function AppSidebar() {
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={onNavigate}
               className="relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors group"
             >
               {isActive && (
@@ -50,7 +57,7 @@ export default function AppSidebar() {
                 }`}
               />
               <span
-                className={`relative z-10 hidden lg:block ${
+                className={`relative z-10 ${
                   isActive ? "text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground group-hover:text-foreground"
                 }`}
               >
@@ -64,7 +71,7 @@ export default function AppSidebar() {
       <div className="p-3 border-t border-sidebar-border">
         <div className="flex items-center gap-2 px-2">
           <Database className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="hidden lg:block text-xs text-muted-foreground">{datasetSummary}</span>
+          <span className="text-xs text-muted-foreground">{datasetSummary}</span>
         </div>
       </div>
     </aside>

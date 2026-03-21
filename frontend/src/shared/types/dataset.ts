@@ -27,11 +27,12 @@ export interface DatasetChart {
   type: "bar" | "line" | "pie" | "area" | "scatter";
   dataKey: string;
   data: Array<{
-    x: any;
-    label: any;
-    label: any;
-    x: any; name: string; value: number 
-}>;
+    name?: string;
+    value?: number;
+    label?: string | number;
+    x?: string | number;
+    y?: number;
+  }>;
 }
 
 export interface DatasetSummary {

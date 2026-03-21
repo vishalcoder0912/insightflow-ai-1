@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { datasetApi } from "@/shared/services/api";
 import type { DatasetRecord, ParsedData } from "@/shared/types/dataset";
@@ -39,7 +39,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [dataset, setDataset] = useState<DatasetRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshDataset = async () => {
+  const refreshDataset = useCallback(async () => {
     setIsLoading(true);
     try {
       const current = await datasetApi.getCurrent();
@@ -49,13 +49,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshDataset();
-  }, []);
+  }, [refreshDataset]);
 
-  const uploadDataset = async (payload: { fileName: string; csv: string }) => {
+  const uploadDataset = useCallback(async (payload: { fileName: string; csv: string }) => {
     setIsLoading(true);
     try {
       const current = await datasetApi.upload(payload);
@@ -68,9 +68,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const clearData = async () => {
+  const clearData = useCallback(async () => {
     setIsLoading(true);
     try {
       await datasetApi.clear();
@@ -78,7 +78,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const parsed: ParsedData | null = dataset
     ? {
@@ -92,7 +92,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(
     () => ({ dataset, parsed, fileName, isLoading, uploadDataset, clearData, refreshDataset }),
-    [dataset, parsed, fileName, isLoading],
+    [dataset, parsed, fileName, isLoading, uploadDataset, clearData, refreshDataset],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

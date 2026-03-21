@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import {
-  Upload,
   FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
   X,
   Loader2,
-  Files,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -67,8 +65,8 @@ export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
 
   // ── On mount: clear any previously loaded dataset so the upload UI is shown ──
-  // Run only once; don't include `parsed` in deps to avoid an infinite loop
-  // when clearData updates the context and re-renders this component.
+  // Intentional one-time effect: we only want to reset data on initial mount,
+  // not every time the context updates as a result of clearing.
   useEffect(() => {
     void clearData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,23 +192,17 @@ export default function UploadPage() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
+          className={`relative border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors dropzone-shell ${
             isDragActive
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-muted-foreground"
+              ? "dropzone-active border-primary/60 bg-primary/5"
+              : "border-border/60 hover:border-primary/40"
           }`}
         >
           <input {...getInputProps()} />
 
-          {isDragActive ? (
-            <Files className="w-10 h-10 mx-auto mb-4 text-primary" />
-          ) : (
-            <Upload
-              className={`w-10 h-10 mx-auto mb-4 ${
-                isLoading || isUploading ? "text-primary animate-pulse" : "text-muted-foreground"
-              }`}
-            />
-          )}
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <FileSpreadsheet className="w-8 h-8 text-primary" />
+          </div>
 
           <p className="text-sm text-foreground font-medium">
             {isLoading || isUploading
@@ -222,6 +214,12 @@ export default function UploadPage() {
           <p className="text-xs text-muted-foreground mt-1">
             Max 20 MB per file · CSV format only · Multiple files supported
           </p>
+
+          {(isLoading || isUploading) && (
+            <div className="mt-5 h-1.5 w-full bg-border/60 rounded-full overflow-hidden">
+              <div className="h-full w-1/3 bg-primary animate-progress" />
+            </div>
+          )}
         </div>
       </motion.div>
 
