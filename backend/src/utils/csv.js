@@ -123,7 +123,7 @@ const splitMultiValues = (value) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
-const buildCounts = (rows, columnIndex, { multiValue = false } = {}) => {
+export const buildCounts = (rows, columnIndex, { multiValue = false } = {}) => {
   const counts = new Map();
   rows.forEach((row) => {
     const raw = row[columnIndex] ?? "";

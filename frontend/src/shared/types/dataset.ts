@@ -58,11 +58,47 @@ export interface ChatResponse {
   answer: string;
   sql: string;
   insights: string[];
-  chart: DatasetChart | null;
+  responseType?: ChatResponseType;
+  chart?: ChatChartPayload | DatasetChart | null;
+  table?: ChatTablePayload | null;
+  meta?: {
+    queryIntent?: string;
+    derivedFrom?: string;
+    filterKeyword?: string;
+  };
   source: "gemini" | "fallback";
   dataset: {
     fileName: string;
     totalRows: number;
     headers: string[];
   };
+}
+
+export type ChatResponseType =
+  | "text"
+  | "table"
+  | "chart"
+  | "text+chart"
+  | "text+table"
+  | "text+chart+table";
+
+export interface ChatChartPayload {
+  title: string;
+  chartType: "bar" | "line" | "pie" | "area" | "scatter";
+  xKey: string;
+  yKey: string;
+  rows: Array<Record<string, string | number>>;
+  config?: {
+    xLabel?: string;
+    yLabel?: string;
+    palette?: string;
+    showGrid?: boolean;
+    showLegend?: boolean;
+    curved?: boolean;
+  };
+}
+
+export interface ChatTablePayload {
+  columns: string[];
+  rows: Array<Record<string, string | number>>;
 }

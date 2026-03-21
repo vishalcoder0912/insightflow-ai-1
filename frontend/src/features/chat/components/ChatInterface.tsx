@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { useDataset } from "@/shared/data/DataContext";
 import { chatApi } from "@/shared/services/api";
-import type { DatasetChart } from "@/shared/types/dataset";
+import type { ChatChartPayload, ChatTablePayload, DatasetChart } from "@/shared/types/dataset";
+import ChatChartCard from "@/features/chat/components/ChatChartCard";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ interface Message {
   isError?: boolean;       // FIX #7 — distinguish error bubbles visually
   sql?: string;
   chart?: DatasetChart | null;
+  chartPayload?: ChatChartPayload | null;
+  table?: ChatTablePayload | null;
 }
 
 // ─── Stable ID generator (avoids Date.now() collision) ─────────────────────────
@@ -67,6 +70,35 @@ function ChartPreview({ chart }: { chart: DatasetChart }) {
   );
 }
 
+const isStructuredChart = (chart: unknown): chart is ChatChartPayload => {
+  if (!chart || typeof chart !== "object") return false;
+  return "chartType" in chart && "rows" in chart && "xKey" in chart && "yKey" in chart;
+};
+
+const toChatChartPayload = (chart: DatasetChart): ChatChartPayload => {
+  const xKey = "name";
+  const yKey = chart.dataKey || "value";
+  const rows = chart.data.map((entry) => ({
+    [xKey]: entry.name ?? entry.label ?? entry.x ?? "",
+    [yKey]: Number(entry.value ?? entry.y ?? 0),
+  }));
+
+  return {
+    title: chart.title,
+    chartType: chart.type,
+    xKey,
+    yKey,
+    rows,
+    config: {
+      xLabel: "",
+      yLabel: "",
+      palette: "cyan",
+      showGrid: true,
+      showLegend: chart.type === "pie",
+      curved: false,
+    },
+  };
+};
 // ─── Main component ─────────────────────────────────────────────────────────────
 
 export default function ChatInterface() {
@@ -77,6 +109,7 @@ export default function ChatInterface() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [openSql, setOpenSql] = useState<Record<string, boolean>>({});
+  const [openTable, setOpenTable] = useState<Record<string, boolean>>({});
 
   // FIX #5 — point ref at the bottom sentinel, not the scroll container
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -103,6 +136,7 @@ export default function ChatInterface() {
     setMessages([buildWelcome(!!dataset)]);
     setInput("");
     setOpenSql({});
+    setOpenTable({});
     inputRef.current?.focus();
   }, [dataset]);
 
@@ -124,6 +158,12 @@ export default function ChatInterface() {
       const history = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
       const resp = await chatApi.send(userMsg.content, dataset, history);
 
+      const structuredChart = resp.chart
+        ? isStructuredChart(resp.chart)
+          ? resp.chart
+          : toChatChartPayload(resp.chart as DatasetChart)
+        : null;
+
       setMessages((prev) => [
         ...prev,
         {
@@ -131,7 +171,9 @@ export default function ChatInterface() {
           role: "assistant",
           content: resp.answer,
           sql: resp.sql,
-          chart: resp.chart,
+          chart: isStructuredChart(resp.chart) ? null : (resp.chart as DatasetChart | null),
+          chartPayload: structuredChart,
+          table: resp.table || null,
         },
       ]);
     } catch (error) {
@@ -230,8 +272,51 @@ export default function ChatInterface() {
                   </div>
                 )}
 
-                {/* FIX #9 — render actual chart preview instead of just describing it */}
-                {msg.chart && <ChartPreview chart={msg.chart} />}
+                {/* FIX #9 � render actual chart preview instead of just describing it */}
+                {msg.chartPayload && (
+                  <ChatChartCard payload={msg.chartPayload} table={msg.table} />
+                )}
+
+                {!msg.chartPayload && msg.chart && <ChartPreview chart={msg.chart} />}
+
+                {!msg.chartPayload && !msg.chart && msg.table && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setOpenTable((prev) => ({ ...prev, [msg.id]: !prev[msg.id] }))}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {openTable[msg.id] ? "Hide data table" : "Show data table"}
+                    </button>
+                    {openTable[msg.id] && (
+                      <div className="mt-2 border border-border rounded-lg overflow-auto max-h-56">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/30">
+                            <tr>
+                              {msg.table.columns.map((col) => (
+                                <th key={col} className="px-2 py-1 text-left text-muted-foreground font-medium">
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {msg.table.rows.slice(0, 20).map((row, index) => (
+                              <tr key={index} className="border-t border-border/60">
+                                {msg.table.columns.map((col) => (
+                                  <td key={col} className="px-2 py-1 text-foreground">
+                                    {String(row[col] ?? "")}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+
               </div>
 
               {/* User avatar */}
@@ -312,6 +397,19 @@ export default function ChatInterface() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

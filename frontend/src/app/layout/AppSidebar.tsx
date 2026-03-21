@@ -7,7 +7,6 @@ import { cn } from "@/shared/lib/utils";
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/upload", icon: Upload, label: "Upload" },
-  { to: "/chat", icon: MessageSquare, label: "AI Chat" },
 ];
 
 interface AppSidebarProps {

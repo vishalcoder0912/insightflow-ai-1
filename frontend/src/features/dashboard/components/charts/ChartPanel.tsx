@@ -1,4 +1,4 @@
-import { useState, useId } from "react";
+import { useEffect, useState, useId } from "react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -8,16 +8,7 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings2, Palette, Type, ChevronDown } from "lucide-react";
-
-export type ChartType = "bar" | "line" | "area" | "pie" | "scatter" | "radar" | "composed";
-
-const PRESET_PALETTES: Record<string, string[]> = {
-  Cyan: ["hsl(187,85%,53%)", "hsl(200,80%,55%)", "hsl(170,70%,50%)", "hsl(210,75%,60%)", "hsl(195,80%,45%)"],
-  Amber: ["hsl(38,92%,60%)", "hsl(25,90%,55%)", "hsl(45,88%,52%)", "hsl(15,85%,58%)", "hsl(50,80%,48%)"],
-  Emerald: ["hsl(160,70%,45%)", "hsl(145,65%,50%)", "hsl(170,60%,40%)", "hsl(135,55%,55%)", "hsl(180,65%,42%)"],
-  Rose: ["hsl(350,80%,60%)", "hsl(340,75%,55%)", "hsl(0,70%,58%)", "hsl(330,72%,52%)", "hsl(10,78%,56%)"],
-  Mixed: ["hsl(187,85%,53%)", "hsl(38,92%,60%)", "hsl(160,70%,45%)", "hsl(350,80%,60%)", "hsl(270,70%,60%)"],
-};
+import { CHART_TYPE_OPTIONS, PRESET_PALETTES, type ChartType } from "@/features/dashboard/components/charts/chartOptions";
 
 const tooltipStyle = {
   contentStyle: {
@@ -28,16 +19,6 @@ const tooltipStyle = {
     color: "hsl(210 20% 92%)",
   },
 };
-
-const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
-  { value: "bar", label: "Bar" },
-  { value: "line", label: "Line" },
-  { value: "area", label: "Area" },
-  { value: "pie", label: "Pie" },
-  { value: "scatter", label: "Scatter" },
-  { value: "radar", label: "Radar" },
-  { value: "composed", label: "Composed" },
-];
 
 export interface ChartConfig {
   xLabel?: string;
@@ -57,6 +38,7 @@ interface ChartPanelProps {
   xKey?: string;
   config?: ChartConfig;
   editable?: boolean;
+  hideHeader?: boolean;
 }
 
 export default function ChartPanel({
@@ -68,6 +50,7 @@ export default function ChartPanel({
   xKey = "name",
   config: initialConfig,
   editable = true,
+  hideHeader = false,
 }: ChartPanelProps) {
   const gradId = useId();
   const [showSettings, setShowSettings] = useState(false);
@@ -81,6 +64,17 @@ export default function ChartPanel({
     curved: true,
     ...initialConfig,
   });
+
+  useEffect(() => {
+    setChartType(initialType);
+  }, [initialType]);
+
+  useEffect(() => {
+    setConfig((prev) => ({
+      ...prev,
+      ...initialConfig,
+    }));
+  }, [initialConfig]);
 
   const colors = PRESET_PALETTES[config.palette || "Mixed"];
   const curveType = config.curved ? "monotone" : "linear";
@@ -185,24 +179,26 @@ export default function ChartPanel({
       animate={{ opacity: 1, y: 0 }}
       className="bg-card/70 backdrop-blur-sm rounded-2xl border border-border/70 p-4 shadow-sm transition-all hover:scale-[1.01] hover:border-primary/40 hover:shadow-[0_0_30px_hsl(217_91%_60%_/_0.2)]"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">{title}</h3>
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      {!hideHeader && (
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-medium text-foreground">{title}</h3>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          {editable && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-1.5 rounded-md transition-colors ${
+                showSettings
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              }`}
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        {editable && (
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-1.5 rounded-md transition-colors ${
-              showSettings
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            }`}
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+      )}
 
       <AnimatePresence>
         {showSettings && (
