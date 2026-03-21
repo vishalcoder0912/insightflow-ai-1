@@ -72,6 +72,11 @@ const isDateLike = (value) => {
   return !Number.isNaN(parsed);
 };
 
+const isRowIndexHeader = (header) => {
+  const lower = String(header || "").trim().toLowerCase();
+  return ["row", "row_id", "rowid", "index", "idx"].includes(lower);
+};
+
 const looksLikeId = (header, values, rowCount) => {
   const lower = header.toLowerCase();
   if (/(^id$|_id$|^id_|id$)/i.test(lower) || lower.includes("uuid") || lower.includes("guid")) {
@@ -149,6 +154,27 @@ const buildYearCounts = (rows, columnIndex) => {
     .map(([name, value]) => ({ name, value }));
 };
 
+const buildDateCounts = (rows, columnIndex) => {
+  const counts = new Map();
+  rows.forEach((row) => {
+    const raw = row[columnIndex];
+    if (!raw) return;
+    if (isYearLike(raw)) {
+      const year = String(raw);
+      counts.set(year, (counts.get(year) || 0) + 1);
+      return;
+    }
+    const parsed = Date.parse(raw);
+    if (Number.isNaN(parsed)) return;
+    const label = new Date(parsed).toISOString().split("T")[0];
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+
+  return [...counts.entries()]
+    .sort((a, b) => (a[0] > b[0] ? 1 : -1))
+    .map(([name, value]) => ({ name, value }));
+};
+
 export const summarizeDataset = (dataset) => {
   const { headers, rows } = dataset;
   const columnProfiles = headers.map((header, index) => {
@@ -161,6 +187,11 @@ export const summarizeDataset = (dataset) => {
     const isIdLike = looksLikeId(header, values, rows.length);
     const isMultiValue = detectMultiValue(values);
     const uniqueRatio = rows.length ? uniqueValues.size / rows.length : 0;
+    const avgLength = values.length
+      ? values.reduce((total, value) => total + String(value || "").length, 0) / values.length
+      : 0;
+    const isRowIndex = isRowIndexHeader(header);
+    const isNearUnique = uniqueRatio >= 0.9 && uniqueValues.size > 10;
 
     let type = "text";
     if (isIdLike) {
@@ -174,6 +205,9 @@ export const summarizeDataset = (dataset) => {
     } else if (uniqueRatio < 0.5 && uniqueValues.size <= 200) {
       type = "categorical";
     }
+
+    const isHighCardText =
+      type === "text" && (uniqueRatio > 0.8 || uniqueValues.size > 200 || avgLength > 24);
 
     const base = {
       name: header,
@@ -189,6 +223,9 @@ export const summarizeDataset = (dataset) => {
         type,
         isIdLike,
         isMultiValue,
+        isHighCardText,
+        isNearUnique,
+        isRowIndex,
       };
     }
 
@@ -206,28 +243,40 @@ export const summarizeDataset = (dataset) => {
       type,
       isIdLike,
       isMultiValue,
+      isHighCardText,
+      isNearUnique,
+      isRowIndex,
     };
   });
 
-  const usableColumns = columnProfiles.filter((column) => !column.isIdLike);
+  const usableColumns = columnProfiles.filter((column) => !column.isIdLike && !column.isRowIndex);
   const numericColumns = usableColumns.filter((column) => column.type === "numeric");
-  const categoricalColumns = usableColumns.filter((column) => column.type === "categorical");
+  const categoricalColumns = usableColumns.filter(
+    (column) =>
+      column.type === "categorical" && !column.isHighCardText && !column.isNearUnique,
+  );
   const dateColumns = usableColumns.filter((column) => column.type === "date");
-  const multiValueColumns = usableColumns.filter((column) => column.isMultiValue);
+  const multiValueColumns = usableColumns.filter(
+    (column) => column.isMultiValue && !column.isHighCardText && !column.isNearUnique,
+  );
 
   const insights = [];
   const chartSuggestions = [];
+  const chartInsightMap = new Map();
 
   const addInsight = (text) => {
-    if (text && insights.length < 5) {
+    if (text && insights.length < 8) {
       insights.push(text);
     }
   };
 
   const candidates = [];
-  const pushCandidate = (chart, type, priority) => {
+  const pushCandidate = (chart, type, priority, insight) => {
     if (!chart || !Array.isArray(chart.data) || chart.data.length === 0) return;
     candidates.push({ chart, type, priority });
+    if (insight) {
+      chartInsightMap.set(chart.title, insight);
+    }
   };
 
   const findColumn = (predicate) => usableColumns.find(predicate);
@@ -281,8 +330,12 @@ export const summarizeDataset = (dataset) => {
     return buckets;
   };
 
-  const typeColumn = findColumn((column) => column.type === "categorical" && column.name.toLowerCase().includes("type"));
-  const ratingColumn = findColumn((column) => column.type === "categorical" && column.name.toLowerCase().includes("rating"));
+  const typeColumn = findColumn(
+    (column) => column.type === "categorical" && column.name.toLowerCase().includes("type"),
+  );
+  const ratingColumn = findColumn(
+    (column) => column.type === "categorical" && column.name.toLowerCase().includes("rating"),
+  );
   const genreColumn =
     findColumn((column) => column.name.toLowerCase().includes("listed_in")) ||
     findColumn((column) => column.name.toLowerCase().includes("genre")) ||
@@ -294,6 +347,9 @@ export const summarizeDataset = (dataset) => {
 
   if (typeColumn) {
     const data = buildCounts(rows, headers.indexOf(typeColumn.name));
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const top = data[0];
+    const share = total ? ((top.value / total) * 100).toFixed(1) : "0";
     pushCandidate(
       {
         title: "Content Type Distribution",
@@ -303,16 +359,15 @@ export const summarizeDataset = (dataset) => {
       },
       "pie",
       90,
+      top ? `Most common content type is ${top.name} (${share}% of records).` : null,
     );
-    if (data[0]) {
-      const total = data.reduce((sum, item) => sum + item.value, 0);
-      const share = total ? ((data[0].value / total) * 100).toFixed(1) : "0";
-      addInsight(`Most common content type is ${data[0].name} (${share}% of titles).`);
-    }
   }
 
   if (releaseYearColumn && (releaseYearColumn.type === "numeric" || releaseYearColumn.type === "date")) {
     const data = buildYearCounts(rows, headers.indexOf(releaseYearColumn.name));
+    const peak = data.length
+      ? data.reduce((best, current) => (current.value > best.value ? current : best), data[0])
+      : null;
     pushCandidate(
       {
         title: "Titles by Release Year",
@@ -322,15 +377,13 @@ export const summarizeDataset = (dataset) => {
       },
       "line",
       90,
+      peak ? `Peak release year is ${peak.name} with ${peak.value} records.` : null,
     );
-    if (data.length) {
-      const peak = data.reduce((best, current) => (current.value > best.value ? current : best), data[0]);
-      addInsight(`Peak release year is ${peak.name} with ${peak.value} titles.`);
-    }
   }
 
   if (ratingColumn) {
     const data = buildCounts(rows, headers.indexOf(ratingColumn.name));
+    const top = data[0];
     pushCandidate(
       {
         title: "Ratings Distribution",
@@ -340,15 +393,14 @@ export const summarizeDataset = (dataset) => {
       },
       "bar",
       80,
+      top ? `Top rating is ${top.name} (${top.value} records).` : null,
     );
-    if (data[0]) {
-      addInsight(`Top rating is ${data[0].name} (${data[0].value} titles).`);
-    }
   }
 
   if (genreColumn) {
     const isMultiValue = genreColumn.isMultiValue || genreColumn.type === "categorical";
     const data = buildCounts(rows, headers.indexOf(genreColumn.name), { multiValue: isMultiValue });
+    const top = data[0];
     pushCandidate(
       {
         title: "Top Genres",
@@ -358,14 +410,13 @@ export const summarizeDataset = (dataset) => {
       },
       "bar",
       70,
+      top ? `Most common genre is ${top.name} (${top.value} records).` : null,
     );
-    if (data[0]) {
-      addInsight(`Most common genre is ${data[0].name} (${data[0].value} titles).`);
-    }
   }
 
   if (countryColumn) {
     const data = buildCounts(rows, headers.indexOf(countryColumn.name), { multiValue: countryColumn.isMultiValue });
+    const top = data[0];
     pushCandidate(
       {
         title: "Top Countries",
@@ -375,16 +426,17 @@ export const summarizeDataset = (dataset) => {
       },
       "bar",
       75,
+      top ? `Top country is ${top.name} (${top.value} records).` : null,
     );
-    if (data[0]) {
-      addInsight(`Top country is ${data[0].name} (${data[0].value} titles).`);
-    }
   }
 
   const lowCardCategorical = categoricalColumns.filter((column) => column.unique <= 8);
   const bestPieColumn = pickBest(lowCardCategorical, ["education", "company", "size", "type", "level"]);
   if (bestPieColumn) {
     const data = buildCounts(rows, headers.indexOf(bestPieColumn.name));
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const top = data[0];
+    const share = total ? ((top.value / total) * 100).toFixed(1) : "0";
     pushCandidate(
       {
         title: `${bestPieColumn.name} Distribution`,
@@ -394,12 +446,14 @@ export const summarizeDataset = (dataset) => {
       },
       "pie",
       85,
+      top ? `${top.name} leads ${bestPieColumn.name} (${share}% of records).` : null,
     );
   }
 
   const bestBarColumn = pickBest(categoricalColumns, ["country", "education", "company", "size", "type"]);
   if (bestBarColumn) {
     const data = buildCounts(rows, headers.indexOf(bestBarColumn.name), { multiValue: bestBarColumn.isMultiValue });
+    const top = data[0];
     pushCandidate(
       {
         title: `Top ${bestBarColumn.name}`,
@@ -409,12 +463,14 @@ export const summarizeDataset = (dataset) => {
       },
       "bar",
       60,
+      top ? `Most common ${bestBarColumn.name} is ${top.name} (${top.value} records).` : null,
     );
   }
 
   const bestMultiValue = pickBest(multiValueColumns, ["language", "framework", "skill", "tool"]);
   if (bestMultiValue) {
     const data = buildCounts(rows, headers.indexOf(bestMultiValue.name), { multiValue: true });
+    const top = data[0];
     pushCandidate(
       {
         title: `Top ${bestMultiValue.name}`,
@@ -424,6 +480,7 @@ export const summarizeDataset = (dataset) => {
       },
       "bar",
       65,
+      top ? `Top ${bestMultiValue.name} value is ${top.name} (${top.value} records).` : null,
     );
   }
 
@@ -440,6 +497,9 @@ export const summarizeDataset = (dataset) => {
         }))
         .filter((point) => Number.isFinite(point.name) && Number.isFinite(point.value))
         .slice(0, 300);
+      const maxPoint = data.length
+        ? data.reduce((best, current) => (current.value > best.value ? current : best), data[0])
+        : null;
       pushCandidate(
         {
           title: `${xCol.name} vs ${yCol.name}`,
@@ -449,6 +509,7 @@ export const summarizeDataset = (dataset) => {
         },
         "scatter",
         90,
+        maxPoint ? `Highest ${yCol.name} observed at ${xCol.name} ${maxPoint.name} (${maxPoint.value}).` : null,
       );
     }
   }
@@ -456,7 +517,46 @@ export const summarizeDataset = (dataset) => {
   if (dateColumns.length > 0) {
     const dateCol = pickBest(dateColumns, ["date", "year"]);
     if (dateCol) {
-      const data = buildYearCounts(rows, headers.indexOf(dateCol.name));
+      const dateIndex = headers.indexOf(dateCol.name);
+      const numCol = pickBest(numericColumns, ["amount", "revenue", "salary", "price", "score"]);
+      let data = [];
+      let insight = null;
+      if (numCol) {
+        const numIndex = headers.indexOf(numCol.name);
+        const grouped = new Map();
+        rows.forEach((row) => {
+          const rawDate = row[dateIndex];
+          const rawValue = row[numIndex];
+          if (!rawDate || rawValue === "") return;
+          const parsed = Date.parse(rawDate);
+          if (Number.isNaN(parsed)) return;
+          const label = isYearLike(rawDate)
+            ? String(rawDate)
+            : new Date(parsed).toISOString().split("T")[0];
+          const entry = grouped.get(label) || { sum: 0, count: 0 };
+          entry.sum += Number(rawValue);
+          entry.count += 1;
+          grouped.set(label, entry);
+        });
+        data = [...grouped.entries()]
+          .sort((a, b) => (a[0] > b[0] ? 1 : -1))
+          .map(([name, bucket]) => ({
+            name,
+            value: bucket.count ? Number((bucket.sum / bucket.count).toFixed(2)) : 0,
+          }));
+        const peak = data.length
+          ? data.reduce((best, current) => (current.value > best.value ? current : best), data[0])
+          : null;
+        insight = peak
+          ? `Peak ${dateCol.name} is ${peak.name} (avg ${numCol.name} ${peak.value}).`
+          : null;
+      } else {
+        data = buildDateCounts(rows, dateIndex);
+        const peak = data.length
+          ? data.reduce((best, current) => (current.value > best.value ? current : best), data[0])
+          : null;
+        insight = peak ? `Peak ${dateCol.name} is ${peak.name} with ${peak.value} records.` : null;
+      }
       pushCandidate(
         {
           title: `${dateCol.name} Trend`,
@@ -466,6 +566,7 @@ export const summarizeDataset = (dataset) => {
         },
         "area",
         80,
+        insight,
       );
     }
   } else if (numericColumns.length >= 1) {
@@ -484,6 +585,7 @@ export const summarizeDataset = (dataset) => {
         },
         "line",
         85,
+        yCol ? `Average ${yCol.name} changes across ${xCol.name} buckets.` : `Distribution of ${xCol.name} across buckets.`,
       );
     }
   }
@@ -516,6 +618,7 @@ export const summarizeDataset = (dataset) => {
           },
           "bar",
           50,
+          `Average ${numCol.name} is ${(numCol.average || 0).toFixed(2)} (min ${min.toFixed(2)}, max ${max.toFixed(2)}).`,
         );
       }
     }
@@ -530,7 +633,17 @@ export const summarizeDataset = (dataset) => {
       }
     });
 
-  const primaryCharts = Array.from(selectedByType.values()).slice(0, 4);
+  const primaryCharts = [];
+  const barChart = selectedByType.get("bar");
+  const pieChart = selectedByType.get("pie");
+  const lineChart = selectedByType.get("line");
+  const areaChart = selectedByType.get("area");
+  const scatterChart = selectedByType.get("scatter");
+
+  if (barChart) primaryCharts.push(barChart);
+  if (pieChart) primaryCharts.push(pieChart);
+  if (lineChart || areaChart) primaryCharts.push(lineChart || areaChart);
+  if (scatterChart) primaryCharts.push(scatterChart);
 
   if (primaryCharts.length < 4) {
     candidates
@@ -548,26 +661,91 @@ export const summarizeDataset = (dataset) => {
     }
   });
 
+  if (chartSuggestions.length < 6) {
+    candidates
+      .sort((a, b) => b.priority - a.priority)
+      .forEach(({ chart }) => {
+        if (chartSuggestions.length >= 6) return;
+        if (chartSuggestions.find((existing) => existing.title === chart.title)) return;
+        chartSuggestions.push(chart);
+      });
+  }
+
   if (chartSuggestions.length === 0) {
     addInsight(`Dataset contains ${rows.length.toLocaleString()} rows across ${headers.length} columns.`);
   }
 
-  const kpis = numericColumns.slice(0, 4).map((column) => ({
-    label: column.name,
-    value:
-      Math.abs(column.sum || 0) >= 1000
-        ? (column.sum || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
-        : (column.average || 0).toFixed(2),
-    helperText:
-      Math.abs(column.sum || 0) >= 1000
-        ? `Sum across ${rows.length} rows`
-        : `Average across ${rows.length} rows`,
-  }));
+  const chartDrivenInsights = [];
+  chartSuggestions.forEach((chart) => {
+    const insight = chartInsightMap.get(chart.title);
+    if (insight) {
+      chartDrivenInsights.push(insight);
+    }
+  });
+
+  chartDrivenInsights.slice(0, 6).forEach((text) => addInsight(text));
+
+  if (!insights.length) {
+    addInsight(`Dataset contains ${rows.length.toLocaleString()} rows across ${headers.length} columns.`);
+  }
+
+  const keyNumeric = pickBest(numericColumns, ["salary", "amount", "revenue", "price", "score", "value"]);
+  const keyCategory = pickBest(categoricalColumns, ["country", "education", "company", "size", "type"]);
+  let topCategoryKpi = null;
+  let topCategoryHelper = "Usable categorical fields";
+  if (keyCategory) {
+    const counts = buildCounts(rows, headers.indexOf(keyCategory.name), { multiValue: keyCategory.isMultiValue });
+    if (counts[0]) {
+      topCategoryKpi = {
+        label: `Top ${keyCategory.name}`,
+        value: String(counts[0].name),
+        helperText: `${counts[0].value} records`,
+      };
+      topCategoryHelper = `Top ${keyCategory.name}: ${counts[0].name} (${counts[0].value})`;
+    }
+  }
+
+  const numericHelper = keyNumeric
+    ? `Avg ${keyNumeric.name} ${(keyNumeric.average || 0).toFixed(2)} · Max ${keyNumeric.max != null ? keyNumeric.max.toFixed(2) : "n/a"}`
+    : "Usable numeric fields";
+
+  const kpis = [
+    {
+      label: "Total Rows",
+      value: rows.length.toLocaleString(),
+      helperText: "Rows in dataset",
+    },
+    {
+      label: "Total Columns",
+      value: headers.length.toLocaleString(),
+      helperText: "Columns detected",
+    },
+    {
+      label: "Numeric Columns",
+      value: numericColumns.length.toString(),
+      helperText: numericHelper,
+    },
+    {
+      label: "Categorical Columns",
+      value: categoricalColumns.length.toString(),
+      helperText: topCategoryHelper,
+    },
+    keyNumeric
+      ? {
+          label: `Avg ${keyNumeric.name}`,
+          value: (keyNumeric.average || 0).toFixed(2),
+          helperText: `Max ${keyNumeric.max != null ? keyNumeric.max.toFixed(2) : "n/a"}`,
+        }
+      : null,
+    topCategoryKpi,
+  ].filter(Boolean);
 
   return {
     rowCount: rows.length,
     columnCount: headers.length,
-    columns: columnProfiles.map(({ type, isIdLike, isMultiValue, ...rest }) => rest),
+    columns: columnProfiles.map(
+      ({ type, isIdLike, isMultiValue, isHighCardText, isNearUnique, isRowIndex, ...rest }) => rest,
+    ),
     kpis,
     insights,
     chartSuggestions,

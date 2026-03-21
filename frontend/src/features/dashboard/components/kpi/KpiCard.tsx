@@ -20,13 +20,13 @@ export default function KpiCard({ label, value, change, changeType = "neutral", 
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card rounded-lg p-4 card-elevated"
+      className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-all"
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
-        <Icon className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</span>
+        <Icon className="w-4 h-4 text-gray-400" />
       </div>
-      <div className="text-2xl font-semibold text-foreground font-mono">{value}</div>
+      <div className="text-2xl font-semibold text-gray-900 font-mono">{value}</div>
       {change && (
         <p className={`text-xs mt-1 ${changeColor}`}>{change}</p>
       )}

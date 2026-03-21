@@ -4,6 +4,58 @@
 
 @layer base {
   :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 187 85% 53%;
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 38 92% 60%;
+    --accent-foreground: 220 20% 7%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 187 85% 53%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 215 16% 47%;
+    --sidebar-primary: 187 85% 53%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 187 85% 53%;
+
+    --chart-cyan: 187 85% 53%;
+    --chart-amber: 38 92% 60%;
+    --chart-emerald: 160 70% 45%;
+    --chart-rose: 350 80% 60%;
+    --chart-violet: 270 70% 60%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(187 85% 53%), hsl(210 80% 55%));
+    --gradient-accent: linear-gradient(135deg, hsl(38 92% 60%), hsl(25 90% 55%));
+    --shadow-glow: 0 0 20px hsl(187 85% 53% / 0.15);
+    --shadow-card: 0 1px 2px hsl(215 20% 65% / 0.2), 0 0 0 1px hsl(214 32% 91%);
+  }
+
+  .dark {
     --background: 220 20% 7%;
     --foreground: 210 20% 92%;
 
@@ -31,8 +83,6 @@
     --border: 220 14% 18%;
     --input: 220 14% 18%;
     --ring: 187 85% 53%;
-
-    --radius: 0.5rem;
 
     --sidebar-background: 220 20% 5%;
     --sidebar-foreground: 210 15% 65%;

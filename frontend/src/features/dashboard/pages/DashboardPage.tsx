@@ -17,25 +17,25 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+        <p className="text-sm text-gray-500 mt-1">
           {dataset ? `Analyzing ${dataset.fileName}` : "Upload a dataset to generate real analytics."}
         </p>
       </div>
       {parsed && (
-        <div className="bg-card rounded-lg card-elevated overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h2 className="text-sm font-medium text-foreground">Analysis Data</h2>
-            <p className="text-xs text-muted-foreground mt-1">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-sm font-medium text-gray-900">Analysis Data</h2>
+            <p className="text-xs text-gray-500 mt-1">
               {fileName || "Uploaded dataset"} | {parsed.headers.length} columns | {parsed.totalRows.toLocaleString()} rows
             </p>
           </div>
           <div className="overflow-auto max-h-[360px]">
             <table className="w-full data-grid">
               <thead>
-                <tr className="bg-muted/50">
+                <tr className="bg-gray-50">
                   {parsed.headers.map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    <th key={i} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -43,9 +43,9 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {parsed.rows.slice(0, 25).map((row, i) => (
-                  <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                  <tr key={i} className="border-t border-gray-200 hover:bg-gray-50 transition-colors">
                     {row.map((cell, j) => (
-                      <td key={j} className="px-3 py-1.5 text-xs text-secondary-foreground whitespace-nowrap max-w-[200px] truncate">
+                      <td key={j} className="px-3 py-1.5 text-xs text-gray-700 whitespace-nowrap max-w-[200px] truncate">
                         {cell}
                       </td>
                     ))}
@@ -58,7 +58,7 @@ export default function Dashboard() {
       )}
 
       {activeKpis.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {activeKpis.slice(0, 4).map((kpi, index) => (
             <KpiCard
               key={kpi.label}
@@ -73,7 +73,7 @@ export default function Dashboard() {
       )}
 
       {primaryCharts.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {primaryCharts.map((chart) => (
             <ChartPanel
               key={chart.title}
@@ -88,7 +88,7 @@ export default function Dashboard() {
       )}
 
       {secondaryCharts.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {secondaryCharts.map((chart) => (
             <ChartPanel
               key={chart.title}
@@ -103,15 +103,15 @@ export default function Dashboard() {
       )}
 
       {activeInsights.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-lg p-4 card-elevated"
+            className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm"
           >
             <div className="flex items-center gap-2 mb-4">
               <Lightbulb className="w-4 h-4 text-accent" />
-              <h3 className="text-sm font-medium text-foreground">AI Insights</h3>
+              <h3 className="text-sm font-medium text-gray-900">AI Insights</h3>
             </div>
             <div className="space-y-3">
               {activeInsights.map((insight, i) => (
@@ -120,7 +120,7 @@ export default function Dashboard() {
                     i === 0 ? "bg-chart-cyan" :
                     i === 1 ? "bg-chart-amber" : "bg-chart-emerald"
                   }`} />
-                  <p className="text-xs text-secondary-foreground leading-relaxed">{insight}</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{insight}</p>
                 </div>
               ))}
             </div>
