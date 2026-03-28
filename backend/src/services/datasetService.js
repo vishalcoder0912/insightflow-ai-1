@@ -1,4 +1,4 @@
-import { saveDataset, readDataset, clearDataset } from "../storage/datasetStore.js";
+import { saveDataset, readDataset, readDatasetById, clearDataset } from "../storage/datasetStore.js";
 import { parseCsv, summarizeDataset } from "../utils/csv.js";
 
 const previewLimit = 100;
@@ -64,6 +64,15 @@ export const getDatasetForAnalysis = async () => {
     return await readDataset();
   } catch (error) {
     console.error("Error reading dataset for analysis:", error);
+    return null;
+  }
+};
+
+export const getDatasetForAnalysisById = async (datasetId) => {
+  try {
+    return await readDatasetById(datasetId);
+  } catch (error) {
+    console.error("Error reading dataset by id for analysis:", error);
     return null;
   }
 };

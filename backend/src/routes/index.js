@@ -1,7 +1,7 @@
 import { methodNotAllowed, notFound } from "../utils/http.js";
 import { healthController } from "../controllers/healthController.js";
 import { datasetController } from "../controllers/datasetController.js";
-import { chatController } from "../controllers/chatController.js";
+import { chatRoute } from "./chat.js";
 
 const routes = {
   "/health": {
@@ -15,7 +15,7 @@ const routes = {
     DELETE: datasetController.delete,
   },
   "/api/chat": {
-    POST: chatController,
+    POST: chatRoute,
   },
 };
 

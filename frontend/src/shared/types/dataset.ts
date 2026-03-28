@@ -81,6 +81,69 @@ export interface PredictionChartData {
   confidence?: number;
 }
 
+export interface ChatFeatureColumn {
+  name: string;
+  key?: string;
+  role?: string;
+  detectedType?: string;
+  filled?: number;
+  empty?: number;
+  unique?: number;
+  sampleValues?: string[];
+  numeric?: boolean;
+  min?: number;
+  max?: number;
+  average?: number;
+  sum?: number;
+  topValues?: Array<{
+    value: string;
+    count: number;
+  }>;
+}
+
+export interface ChatPattern {
+  type: string;
+  message: string;
+  confidence?: number;
+}
+
+export interface ChatFeatures {
+  datasetId?: string;
+  fileName?: string;
+  rowCount?: number;
+  columnCount?: number;
+  schema?: string;
+  headers?: string[];
+  columns: ChatFeatureColumn[];
+  dimensions?: ChatFeatureColumn[];
+  measures?: ChatFeatureColumn[];
+  temporalColumns?: ChatFeatureColumn[];
+  chartSuggestions?: DatasetChart[];
+  availableChartTypes?: DatasetChart["type"][];
+  patterns?: ChatPattern[];
+  previewTable?: ChatTablePayload | null;
+}
+
+export interface ChatAnalysis {
+  intent?: string;
+  metric?: string;
+  groupBy?: string | null;
+  measure?: string | null;
+  filters?: Array<{
+    column: string;
+    operator?: string;
+    value: string | number;
+  }>;
+  confidence?: number;
+  sql?: string;
+  summary?: string;
+  highlights?: string[];
+  resultCount?: number;
+  table?: ChatTablePayload | null;
+  chart?: ChatChartPayload | DatasetChart | null;
+  suggestedCharts?: DatasetChart[];
+}
+
 export interface DatasetSummary {
   rowCount: number;
   columnCount: number;
@@ -109,6 +172,9 @@ export interface ChatResponse {
   responseType?: ChatResponseType;
   chart?: ChatChartPayload | DatasetChart | null;
   table?: ChatTablePayload | null;
+  suggestedCharts?: DatasetChart[];
+  analysis?: ChatAnalysis | null;
+  features?: ChatFeatures | null;
   meta?: {
     queryIntent?: string;
     derivedFrom?: string;

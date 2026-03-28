@@ -1,6 +1,13 @@
 import { runLocalDatasetQuery } from "@/ai-engine/analystEngine";
 import { analyticsTracker } from "@/analytics/tracker";
-import type { ChatResponse, DatasetChart, DatasetRecord } from "@/shared/types/dataset";
+import type {
+  ChatAnalysis,
+  ChatFeatures,
+  ChatResponse,
+  ChatTablePayload,
+  DatasetChart,
+  DatasetRecord,
+} from "@/shared/types/dataset";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -162,6 +169,219 @@ const normalizeChart = (chart: unknown): DatasetChart | null => {
   };
 };
 
+const normalizeTable = (table: unknown): ChatTablePayload | null => {
+  if (!table || typeof table !== "object") {
+    return null;
+  }
+
+  const candidate = asRecord(table);
+  const columns = asStringArray(getField(candidate, "columns"));
+  const rows = asRecordArray(getField(candidate, "rows")).map((row) =>
+    Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        key,
+        typeof value === "number" ? value : String(value ?? ""),
+      ]),
+    ),
+  );
+
+  if (!columns.length || !rows.length) {
+    return null;
+  }
+
+  return { columns, rows };
+};
+
+const normalizeFeatures = (value: unknown): ChatFeatures | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const features = asRecord(value);
+
+  return {
+    datasetId: asString(getField(features, "datasetId", "dataset_id")) || undefined,
+    fileName: asString(getField(features, "fileName", "file_name")) || undefined,
+    rowCount: asOptionalNumber(getField(features, "rowCount", "row_count")),
+    columnCount: asOptionalNumber(getField(features, "columnCount", "column_count")),
+    schema: asString(getField(features, "schema")) || undefined,
+    headers: asStringArray(getField(features, "headers")),
+    columns: asArray(getField(features, "columns")).map((columnRaw) => {
+      const column = asRecord(columnRaw);
+      return {
+        name: asString(getField(column, "name")),
+        key: asString(getField(column, "key")) || undefined,
+        role: asString(getField(column, "role")) || undefined,
+        detectedType: asString(getField(column, "detectedType", "detected_type")) || undefined,
+        filled: asOptionalNumber(getField(column, "filled")),
+        empty: asOptionalNumber(getField(column, "empty")),
+        unique: asOptionalNumber(getField(column, "unique")),
+        sampleValues: asStringArray(getField(column, "sampleValues", "sample_values")),
+        numeric: typeof getField(column, "numeric") === "boolean" ? Boolean(getField(column, "numeric")) : undefined,
+        min: asOptionalNumber(getField(column, "min")),
+        max: asOptionalNumber(getField(column, "max")),
+        average: asOptionalNumber(getField(column, "average")),
+        sum: asOptionalNumber(getField(column, "sum")),
+        topValues: asArray(getField(column, "topValues", "top_values")).map((entryRaw) => {
+          const entry = asRecord(entryRaw);
+          return {
+            value: asString(getField(entry, "value")),
+            count: asNumber(getField(entry, "count")),
+          };
+        }),
+      };
+    }),
+    dimensions: asArray(getField(features, "dimensions")).map((columnRaw) => {
+      const column = asRecord(columnRaw);
+      return {
+        name: asString(getField(column, "name")),
+        role: asString(getField(column, "role")) || undefined,
+        detectedType: asString(getField(column, "detectedType", "detected_type")) || undefined,
+      };
+    }),
+    measures: asArray(getField(features, "measures")).map((columnRaw) => {
+      const column = asRecord(columnRaw);
+      return {
+        name: asString(getField(column, "name")),
+        role: asString(getField(column, "role")) || undefined,
+        detectedType: asString(getField(column, "detectedType", "detected_type")) || undefined,
+      };
+    }),
+    temporalColumns: asArray(getField(features, "temporalColumns", "temporal_columns")).map((columnRaw) => {
+      const column = asRecord(columnRaw);
+      return {
+        name: asString(getField(column, "name")),
+        role: asString(getField(column, "role")) || undefined,
+        detectedType: asString(getField(column, "detectedType", "detected_type")) || undefined,
+      };
+    }),
+    chartSuggestions: asArray(getField(features, "chartSuggestions", "chart_suggestions"))
+      .map((chart) => normalizeChart(chart))
+      .filter((chart): chart is DatasetChart => Boolean(chart)),
+    availableChartTypes: asArray(getField(features, "availableChartTypes", "available_chart_types"))
+      .map((type) => asChartType(type)),
+    patterns: asArray(getField(features, "patterns")).map((patternRaw) => {
+      const pattern = asRecord(patternRaw);
+      return {
+        type: asString(getField(pattern, "type"), "pattern"),
+        message: asString(getField(pattern, "message")),
+        confidence: asOptionalNumber(getField(pattern, "confidence")),
+      };
+    }),
+    previewTable: normalizeTable(getField(features, "previewTable", "preview_table")),
+  };
+};
+
+const normalizeAnalysis = (value: unknown): ChatAnalysis | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const analysis = asRecord(value);
+
+  return {
+    intent: asString(getField(analysis, "intent")) || undefined,
+    metric: asString(getField(analysis, "metric")) || undefined,
+    groupBy: asString(getField(analysis, "groupBy", "group_by")) || undefined,
+    measure: asString(getField(analysis, "measure")) || undefined,
+    filters: asArray(getField(analysis, "filters")).map((filterRaw) => {
+      const filter = asRecord(filterRaw);
+      return {
+        column: asString(getField(filter, "column")),
+        operator: asString(getField(filter, "operator")) || undefined,
+        value: typeof getField(filter, "value") === "number"
+          ? asNumber(getField(filter, "value"))
+          : asString(getField(filter, "value")),
+      };
+    }),
+    confidence: asOptionalNumber(getField(analysis, "confidence")),
+    sql: asString(getField(analysis, "sql")) || undefined,
+    summary: asString(getField(analysis, "summary")) || undefined,
+    highlights: asStringArray(getField(analysis, "highlights")),
+    resultCount: asOptionalNumber(getField(analysis, "resultCount", "result_count")),
+    table: normalizeTable(getField(analysis, "table")),
+    chart: normalizeChart(getField(analysis, "chart")),
+    suggestedCharts: asArray(getField(analysis, "suggestedCharts", "suggested_charts"))
+      .map((chart) => normalizeChart(chart))
+      .filter((chart): chart is DatasetChart => Boolean(chart)),
+  };
+};
+
+const normalizeChatResponse = (
+  payload: unknown,
+  fallbackDataset: DatasetRecord,
+): ChatResponse => {
+  const envelope = asRecord(payload);
+  const responseRecord = getField(envelope, "response") !== undefined
+    ? asRecord(getField(envelope, "response"))
+    : envelope;
+  const analysis = normalizeAnalysis(getField(envelope, "analysis"))
+    || normalizeAnalysis(getField(responseRecord, "analysis"));
+  const features = normalizeFeatures(getField(envelope, "features"))
+    || normalizeFeatures(getField(responseRecord, "features"));
+  const responseType = asString(getField(responseRecord, "responseType", "response_type")) || undefined;
+  const meta = asRecord(getField(responseRecord, "meta"));
+  const responseDataset = asRecord(getField(responseRecord, "dataset"));
+  const datasetSchema = asString(getField(responseDataset, "schema")) || undefined;
+  const datasetColumns = asStringArray(getField(responseDataset, "columns"));
+  const suggestedCharts = asArray(getField(envelope, "suggestedCharts", "suggested_charts"))
+    .map((chart) => normalizeChart(chart))
+    .filter((chart): chart is DatasetChart => Boolean(chart));
+  const chart = normalizeChart(getField(responseRecord, "chart"))
+    || analysis?.chart
+    || suggestedCharts[0]
+    || null;
+  const table = normalizeTable(getField(responseRecord, "table")) || analysis?.table || null;
+  const normalized: ChatResponse = {
+    answer: asString(getField(responseRecord, "answer"), "No answer available."),
+    sql: asString(getField(responseRecord, "sql")),
+    insights: asStringArray(getField(responseRecord, "insights")),
+    chart,
+    source: asString(getField(responseRecord, "source"), "fallback"),
+    dataset: {
+      fileName: asString(getField(responseDataset, "fileName", "file_name"), fallbackDataset.fileName),
+      totalRows: asNumber(getField(responseDataset, "totalRows", "total_rows"), fallbackDataset.totalRows),
+      headers: asStringArray(getField(responseDataset, "headers")).length
+        ? asStringArray(getField(responseDataset, "headers"))
+        : fallbackDataset.headers,
+    },
+  };
+
+  if (responseType) {
+    normalized.responseType = responseType;
+  }
+
+  if (Object.keys(meta).length) {
+    normalized.meta = meta;
+  }
+
+  if (datasetSchema) {
+    normalized.dataset.schema = datasetSchema;
+  }
+
+  if (datasetColumns.length) {
+    normalized.dataset.columns = datasetColumns;
+  }
+
+  if (table) {
+    normalized.table = table;
+  }
+
+  if (suggestedCharts.length) {
+    normalized.suggestedCharts = suggestedCharts;
+  }
+
+  if (analysis) {
+    normalized.analysis = analysis;
+  }
+
+  if (features) {
+    normalized.features = features;
+  }
+
+  return normalized;
+};
+
 const normalizeDatasetRecord = (value: unknown): DatasetRecord | null => {
   if (!value) {
     return null;
@@ -246,7 +466,7 @@ export const chatApi = {
     history: { role: "user" | "assistant"; content: string }[],
   ): Promise<ChatResponse> => {
     try {
-      const response = await request<ChatResponse>("/api/chat", {
+      const payload = await request<unknown>("/api/chat", {
         method: "POST",
         body: JSON.stringify({
           message,
@@ -254,6 +474,7 @@ export const chatApi = {
           history,
         }),
       });
+      const response = normalizeChatResponse(payload, dataset);
 
       analyticsTracker.trackFeature("chat_query", {
         source: response.source,

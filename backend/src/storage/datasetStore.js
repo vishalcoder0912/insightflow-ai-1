@@ -1,5 +1,6 @@
 import {
   createDataset,
+  getDataset as getDatasetRecord,
   deleteDataset,
   getCurrentDataset as getCurrentDatasetRecord,
 } from "../models/datasetModel.js";
@@ -42,6 +43,32 @@ export const readDataset = async () => {
     };
   } catch (error) {
     console.error("Error reading dataset:", error);
+    throw new Error("Failed to read dataset from database");
+  }
+};
+
+export const readDatasetById = async (datasetId) => {
+  try {
+    await connectToDatabase();
+
+    const record = await getDatasetRecord(datasetId);
+    if (!record) {
+      return null;
+    }
+
+    return {
+      id: String(record.id),
+      fileName: record.fileName,
+      uploadedAt: record.uploadedAt,
+      headers: record.headers,
+      rows: record.rows,
+      totalRows: record.totalRows,
+      previewRows: record.previewRows,
+      summary: record.summary,
+      records: record.records,
+    };
+  } catch (error) {
+    console.error("Error reading dataset by id:", error);
     throw new Error("Failed to read dataset from database");
   }
 };
