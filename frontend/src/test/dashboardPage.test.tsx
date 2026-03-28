@@ -7,73 +7,42 @@ vi.mock("@/shared/data/DataContext", () => ({
   useDataset: () => ({
     dataset: {
       fileName: "sales.csv",
+      headers: ["Region", "Sales"],
+      totalRows: 1200,
+      previewRows: [
+        ["North", "120"],
+        ["South", "240"],
+        ["West", "180"],
+      ],
       summary: {
         rowCount: 1200,
-        columnCount: 6,
-        domain: {
-          key: "sales",
-          label: "Sales",
-          confidence: 0.92,
-          matchedColumns: ["Order Date", "Region", "Sales"],
-          description: "This dataset looks like commercial transaction data.",
-        },
+        columnCount: 2,
         columns: [
-          { name: "Order Date", detectedType: "date" },
-          { name: "Region", detectedType: "categorical" },
-          { name: "Sales", detectedType: "numeric" },
+          { name: "Region", detectedType: "categorical", numeric: false },
+          { name: "Sales", detectedType: "numeric", numeric: true },
         ],
-        kpis: [
-          { label: "Total Rows", value: "1,200", helperText: "Rows in dataset" },
-        ],
+        kpis: [{ label: "Total Rows", value: "1,200", helperText: "Rows in dataset" }],
         insights: ["Sales data detected."],
-        chartSuggestions: [
-          {
-            title: "Sales Over Time",
-            type: "area",
-            dataKey: "value",
-            data: [{ name: "2024-01", value: 120 }],
-          },
-          {
-            title: "Sales by Region",
-            type: "bar",
-            dataKey: "value",
-            data: [{ name: "North", value: 85 }],
-          },
-        ],
+        chartSuggestions: [],
       },
     },
-    parsed: {
-      headers: ["Order Date", "Region", "Sales"],
-      rows: [["2024-01-01", "North", "120"]],
-      totalRows: 1200,
-    },
-    patterns: [],
-    predictionChart: null,
-    predictionData: [],
-    fileName: "sales.csv",
+    loading: false,
   }),
 }));
 
-vi.mock("@/features/dashboard/components/charts/ChartPanel", () => ({
-  default: ({ title }: { title: string }) => <div>{title}</div>,
-}));
-
-vi.mock("@/features/dashboard/components/DashboardChatPanel", () => ({
-  default: () => <div>Chat Panel</div>,
-}));
-
 describe("DashboardPage", () => {
-  it("renders generated chart titles for analyzed datasets", async () => {
+  it("renders the shared five-chart dashboard for analyzed datasets", async () => {
     render(
       <Suspense fallback={<div>Loading...</div>}>
         <DashboardPage />
       </Suspense>,
     );
 
-    expect(screen.getByText("Detected Dataset Type")).toBeInTheDocument();
-    expect(screen.getByText("Sales Data")).toBeInTheDocument();
-    expect(screen.getByText("Generated Charts")).toBeInTheDocument();
-    expect(await screen.findByText("Sales Over Time")).toBeInTheDocument();
-    expect(await screen.findByText("Sales by Region")).toBeInTheDocument();
+    expect(screen.getByText("sales.csv")).toBeInTheDocument();
+    expect(screen.getByText("Bar Chart")).toBeInTheDocument();
+    expect(screen.getByText("Line Chart")).toBeInTheDocument();
+    expect(screen.getByText("Pie Chart")).toBeInTheDocument();
+    expect(screen.getByText("Area Chart")).toBeInTheDocument();
+    expect(await screen.findByText("Scatter Chart")).toBeInTheDocument();
   });
 });

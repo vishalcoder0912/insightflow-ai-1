@@ -1,5 +1,5 @@
-import { memo, useMemo, useState } from "react";
-import { Activity, ArrowDownToLine, ArrowUpToLine, Sigma } from "lucide-react";
+import { memo, useMemo, useRef, useState } from "react";
+import { Activity, ArrowDownToLine, ArrowUpToLine, ChevronDown, Sigma } from "lucide-react";
 import AreaChartComponent from "./AreaChartComponent.jsx";
 import BarChartComponent from "./BarChartComponent.jsx";
 import ControlPanel from "./ControlPanel.jsx";
@@ -90,6 +90,7 @@ const EmptyDashboardState = memo(({ title }) => (
 
 const Dashboard = memo(({ data = [], loading = false, title = "CSV Analytics Dashboard", description = "Interactive analytics workspace" }) => {
   const [controls, setControls] = useState(initialControls);
+  const chartsRef = useRef(null);
 
   const normalizedData = useMemo(() => normalizeData(data), [data]);
   const cumulativeData = useMemo(() => buildCumulativeData(normalizedData), [normalizedData]);
@@ -114,14 +115,32 @@ const Dashboard = memo(({ data = [], loading = false, title = "CSV Analytics Das
     };
   }, [hasData, normalizedData]);
 
+  const handleScrollDown = () => {
+    chartsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   return (
     <div className="min-h-full bg-slate-100/60 p-4 md:p-6 xl:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">Analyst workspace</p>
-            <h1 className="text-3xl font-semibold text-slate-900">{title}</h1>
-            <p className="max-w-3xl text-sm text-slate-500">{description}</p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">Analyst workspace</p>
+              <h1 className="text-3xl font-semibold text-slate-900">{title}</h1>
+              <p className="max-w-3xl text-sm text-slate-500">{description}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleScrollDown}
+              className="inline-flex items-center justify-center gap-2 self-start rounded-2xl bg-sky-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-sky-700"
+            >
+              Scroll Down
+              <ChevronDown className="h-4 w-4" />
+            </button>
           </div>
         </header>
 
@@ -136,6 +155,13 @@ const Dashboard = memo(({ data = [], loading = false, title = "CSV Analytics Das
         {!loading && !hasData ? (
           <EmptyDashboardState title="No usable chart data detected" />
         ) : null}
+
+        <div ref={chartsRef} className="flex scroll-mt-6 flex-col gap-1">
+          <h2 className="text-lg font-semibold text-slate-900">5 Charts Overview</h2>
+          <p className="text-sm text-slate-500">
+            Compare category performance, trend movement, share distribution, cumulative growth, and scatter behavior in one view.
+          </p>
+        </div>
 
         <div className="grid gap-6 xl:grid-cols-2">
           <SafeChart title="Bar Chart" subtitle="Category vs value comparison" isLoading={loading} hasData={hasData}>

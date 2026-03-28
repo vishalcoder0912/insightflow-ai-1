@@ -3,10 +3,10 @@ import type { KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, RotateCcw, Send, Sparkles, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import ChartPanel from "@/features/dashboard/components/charts/ChartPanel";
+import ChatChartCard from "@/features/chat/components/ChatChartCard";
 import { useDataset } from "@/shared/data/DataContext";
 import { chatApi } from "@/shared/services/api";
-import type { DatasetChart } from "@/shared/types/dataset";
+import type { ChatChartPayload, ChatResponse, ChatTablePayload, DatasetChart } from "@/shared/types/dataset";
 
 interface Message {
   id: string;
@@ -14,7 +14,10 @@ interface Message {
   content: string;
   isError?: boolean;
   sql?: string;
-  chart?: DatasetChart | null;
+  chart?: ChatResponse["chart"];
+  table?: ChatTablePayload | null;
+  insights?: string[];
+  source?: string;
 }
 
 let counter = 0;
@@ -28,21 +31,69 @@ const buildWelcome = (hasDataset: boolean): Message => ({
     : "Welcome to **Chat**. Upload a dataset first.",
 });
 
-function ChartPreview({ chart }: { chart: DatasetChart }) {
-  if (!chart?.data?.length) {
+const isChartPayload = (chart: Message["chart"]): chart is ChatChartPayload =>
+  Boolean(
+    chart &&
+    typeof chart === "object" &&
+    "rows" in chart &&
+    "chartType" in chart &&
+    Array.isArray(chart.rows),
+  );
+
+const toChartPayload = (chart: Message["chart"]): ChatChartPayload | null => {
+  if (!chart || typeof chart !== "object") {
+    return null;
+  }
+
+  if (isChartPayload(chart)) {
+    return chart;
+  }
+
+  const datasetChart = chart as DatasetChart;
+  if (!Array.isArray(datasetChart.data) || !datasetChart.data.length) {
+    return null;
+  }
+
+  const xKey = datasetChart.xKey || "name";
+  const yKey = datasetChart.dataKey || "value";
+
+  return {
+    title: datasetChart.title || "Chart",
+    chartType: datasetChart.type || "bar",
+    xKey,
+    yKey,
+    rows: datasetChart.data.map((point, index) => {
+      const label = point[xKey] ?? point.name ?? point.label ?? `Item ${index + 1}`;
+      const value = Number(point[yKey] ?? point.value ?? point.y ?? 0);
+
+      return {
+        ...point,
+        [xKey]: String(label),
+        [yKey]: Number.isFinite(value) ? value : 0,
+        label: String(label),
+        value: Number.isFinite(value) ? value : 0,
+      };
+    }),
+    config: {
+      xLabel: datasetChart.xKey || "Category",
+      yLabel: datasetChart.dataKey || "Value",
+      showGrid: true,
+      showLegend: datasetChart.type === "pie",
+      curved: datasetChart.type === "line" || datasetChart.type === "area",
+    },
+  };
+};
+
+function ChartPreview({ chart, table }: { chart: Message["chart"]; table?: ChatTablePayload | null }) {
+  const payload = toChartPayload(chart);
+
+  if (!payload) {
     return null;
   }
 
   return (
-    <div className="mt-4 h-72 overflow-hidden rounded-lg border border-border">
-      <ChartPanel
-        title={chart.title || "Chart"}
-        type={chart.type || "bar"}
-        data={chart.data}
-        dataKey={chart.dataKey || "value"}
-        xKey={chart.xKey || "name"}
-        editable={false}
-      />
+    <div className="mt-4">
+      <ChatChartCard payload={payload} table={table} />
     </div>
   );
 }
@@ -101,6 +152,9 @@ export default function ChatInterface() {
         content: resp.answer || "No answer available.",
         sql: resp.sql || "",
         chart: resp.chart || null,
+        table: resp.table || null,
+        insights: Array.isArray(resp.insights) ? resp.insights : [],
+        source: resp.source,
       };
 
       setMessages((current) => [...current, assistantMsg]);
@@ -187,7 +241,28 @@ export default function ChatInterface() {
                   </div>
                 )}
 
-                {message.chart && <ChartPreview chart={message.chart} />}
+                {message.insights && message.insights.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Insights
+                    </p>
+                    <div className="space-y-1.5">
+                      {message.insights.slice(0, 4).map((insight, index) => (
+                        <p key={`${message.id}-insight-${index}`} className="text-xs text-muted-foreground">
+                          • {insight}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {message.chart && <ChartPreview chart={message.chart} table={message.table} />}
+
+                {message.source && !message.isError && (
+                  <div className="mt-3 inline-flex rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {message.source === "gemini" ? "AI Analytics" : "Dataset Analytics"}
+                  </div>
+                )}
               </div>
 
               {message.role === "user" && (
