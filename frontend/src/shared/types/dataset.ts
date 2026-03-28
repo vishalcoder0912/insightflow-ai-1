@@ -28,58 +28,7 @@ export interface DatasetChart {
   type: "bar" | "line" | "pie" | "area" | "scatter";
   xKey?: string;
   dataKey: string;
-  data?: Array<{
-    name: string | number;
-    value: number;
-    label?: string | number;
-    x?: string | number;
-    y?: number;
-    [key: string]: string | number | null | undefined;
-  }>;
-  labels?: Array<string | number | null>;
-  datasets?: Array<{
-    label?: string;
-    data?: Array<string | number | null>;
-  }>;
-  config?: {
-    xLabel?: string;
-    yLabel?: string;
-    palette?: string;
-    showGrid?: boolean;
-    showLegend?: boolean;
-    curved?: boolean;
-  };
-}
 
-export interface AdvancedInsights {
-  descriptive: string[];
-  diagnostic: string[];
-  prescriptive: string[];
-}
-
-export interface DatasetDomainSummary {
-  key: string;
-  label: string;
-  confidence: number;
-  matchedColumns: string[];
-  description: string;
-}
-
-export interface DatasetPattern {
-  type: "trend" | "anomaly" | "dominance";
-  message: string;
-  confidence: number;
-}
-
-export interface PredictionChartData {
-  chartType: "line";
-  labels: string[];
-  datasets: Array<{
-    label: string;
-    data: Array<number | null>;
-  }>;
-  confidence?: number;
-}
 
 export interface ChatFeatureColumn {
   name: string;

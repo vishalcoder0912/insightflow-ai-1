@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "concurrently -k -n frontend,backend -c cyan,green \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:backend": "npm --prefix backend run dev",
+    "dev": "cd frontend && npx vite --host ::",
     "dev:frontend": "npm --prefix frontend run dev",
     "install:frontend": "npm --prefix frontend install",
     "install:backend": "npm --prefix backend install",
