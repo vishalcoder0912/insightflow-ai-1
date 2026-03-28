@@ -8,6 +8,30 @@ export const PRESET_PALETTES: Record<string, string[]> = {
   Mixed: ["hsl(187,85%,53%)", "hsl(38,92%,60%)", "hsl(160,70%,45%)", "hsl(350,80%,60%)", "hsl(270,70%,60%)"],
 };
 
+export const resolvePaletteName = (palette?: string) => {
+  if (!palette) return "Mixed";
+
+  const normalized = palette.trim().toLowerCase();
+  if (!normalized) return "Mixed";
+  if (normalized === "default" || normalized === "mixed" || normalized === "violet" || normalized === "purple") {
+    return "Mixed";
+  }
+  if (normalized === "cyan" || normalized === "blue") {
+    return "Cyan";
+  }
+  if (normalized === "amber" || normalized === "orange") {
+    return "Amber";
+  }
+  if (normalized === "emerald" || normalized === "green") {
+    return "Emerald";
+  }
+  if (normalized === "rose" || normalized === "pink" || normalized === "red") {
+    return "Rose";
+  }
+
+  return Object.keys(PRESET_PALETTES).find((key) => key.toLowerCase() === normalized) || "Mixed";
+};
+
 export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "bar", label: "Bar" },
   { value: "line", label: "Line" },

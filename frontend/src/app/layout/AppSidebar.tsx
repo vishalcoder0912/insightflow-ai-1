@@ -6,6 +6,9 @@ import { cn } from "@/shared/lib/utils";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/explorer", icon: Database, label: "Explorer" },
+  { to: "/analysis", icon: Sparkles, label: "Analysis" },
+  { to: "/chat", icon: MessageSquare, label: "Chat" },
   { to: "/upload", icon: Upload, label: "Upload" },
 ];
 

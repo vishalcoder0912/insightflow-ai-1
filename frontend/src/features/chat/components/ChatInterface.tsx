@@ -75,6 +75,13 @@ const isStructuredChart = (chart: unknown): chart is ChatChartPayload => {
   return "chartType" in chart && "rows" in chart && "xKey" in chart && "yKey" in chart;
 };
 
+const isLegacyStructuredChart = (
+  chart: unknown,
+): chart is ChatChartPayload & { chart_type: ChatChartPayload["chartType"] } => {
+  if (!chart || typeof chart !== "object") return false;
+  return "chart_type" in chart && "rows" in chart && "xKey" in chart && "yKey" in chart;
+};
+
 const toChatChartPayload = (chart: DatasetChart): ChatChartPayload => {
   const xKey = "name";
   const yKey = chart.dataKey || "value";
@@ -159,9 +166,14 @@ export default function ChatInterface() {
       const resp = await chatApi.send(userMsg.content, dataset, history);
 
       const structuredChart = resp.chart
-        ? isStructuredChart(resp.chart)
-          ? resp.chart
-          : toChatChartPayload(resp.chart as DatasetChart)
+        ? isLegacyStructuredChart(resp.chart)
+          ? {
+              ...resp.chart,
+              chartType: resp.chart.chart_type,
+            } as ChatChartPayload
+          : isStructuredChart(resp.chart)
+            ? resp.chart
+            : toChatChartPayload(resp.chart as DatasetChart)
         : null;
 
       setMessages((prev) => [
@@ -171,7 +183,7 @@ export default function ChatInterface() {
           role: "assistant",
           content: resp.answer,
           sql: resp.sql,
-          chart: isStructuredChart(resp.chart) ? null : (resp.chart as DatasetChart | null),
+          chart: null,
           chartPayload: structuredChart,
           table: resp.table || null,
         },
@@ -272,7 +284,7 @@ export default function ChatInterface() {
                   </div>
                 )}
 
-                {/* FIX #9 — render actual chart preview instead of just describing it */}
+                {/* FIX #9  render actual chart preview instead of just describing it */}
                 {msg.chartPayload && (
                   <ChatChartCard payload={msg.chartPayload} table={msg.table} />
                 )}
@@ -316,9 +328,9 @@ export default function ChatInterface() {
                   </div>
                 )}
 
-
-              </div>
-
+
+              </div>
+
               {/* User avatar */}
               {msg.role === "user" && (
                 <div className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center shrink-0 mt-0.5">
@@ -397,19 +409,19 @@ export default function ChatInterface() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

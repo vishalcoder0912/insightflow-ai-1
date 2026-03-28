@@ -23,7 +23,11 @@ export default function AppLayout() {
 
   const routeLabelMap: Record<string, string> = {
     "/": "Dashboard",
+    "/dashboard": "Dashboard",
+    "/explorer": "Explorer",
+    "/analysis": "Analysis",
     "/upload": "Upload",
+    "/chat": "Chat",
   };
   const currentLabel = routeLabelMap[location.pathname] || "InsightFlow";
   const hasDataset = !!dataset;
@@ -91,7 +95,7 @@ export default function AppLayout() {
               {hasDataset ? "Dataset loaded" : "No dataset"}
             </div>
             <Button asChild size="sm">
-              <Link to="/" className="flex items-center gap-2">
+              <Link to="/chat" className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Open Chat
               </Link>

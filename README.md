@@ -1,53 +1,77 @@
 # InsightFlow AI
 
-## Project structure
+AI-powered data analysis and visualization platform with natural language querying.
 
-`frontend/` contains the React + Vite application.
+## Project Structure
 
-`backend/` contains the Node API for dataset upload, persistence, summarization, and chat analysis.
+```
+insightflow-ai/
+├── backend/              # Python FastAPI backend
+│   ├── app/
+│   │   ├── ai/           # AI/ML integrations (Gemini)
+│   │   ├── models/       # Data models
+│   │   ├── routers/      # API routes
+│   │   ├── services/     # Business logic
+│   │   ├── config.py     # Configuration
+│   │   └── main.py       # FastAPI app entry
+│   ├── data/             # Data storage
+│   └── requirements.txt
+├── frontend/             # React + Vite + TypeScript
+│   ├── src/
+│   │   ├── app/          # Routing and layout
+│   │   ├── features/     # Feature modules (chat, dashboard, upload)
+│   │   ├── shared/       # Reusable hooks, services, types
+│   │   ├── components/   # UI components (shadcn)
+│   │   └── ...
+│   └── ...
+├── docs/                 # Documentation
+│   ├── fixes/            # Fix summaries
+│   └── ...
+├── .env.example
+└── README.md
+```
 
-## Frontend structure
+## Quick Start
 
-`frontend/src/app` contains routing and layout.
+### Backend (Python)
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-`frontend/src/features` contains feature modules such as chat, dashboard, and upload.
+### Frontend (React)
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-`frontend/src/shared` contains reusable hooks, services, types, and utility helpers.
+## Environment Variables
 
-`frontend/src/components/ui` contains the shared shadcn UI layer.
+Copy `.env.example` to `.env` and configure:
 
-## Top-level commands
+**Backend:**
+- `PORT` - Server port (default: 8000)
+- `GEMINI_API_KEY` - Google Gemini API key for AI features
+- `GEMINI_MODEL` - Gemini model name
 
-`npm run dev:frontend`
+**Frontend:**
+- `VITE_API_BASE_URL` - Backend API URL
 
-`npm run build:frontend`
+## API Routes
 
-`npm run dev:backend`
+- `GET /health` - Health check
+- `POST /api/datasets` - Upload dataset
+- `GET /api/datasets/current` - Get current dataset
+- `DELETE /api/datasets/current` - Clear dataset
+- `POST /api/chat` - Chat with AI about data
 
-## Environment
+## Features
 
-Use [.env.example](c:/Users/VISHAL/Desktop/20-12-2025/All_full_stack_preparation/New%20folder/insightflow-ai/.env.example) as the starting point.
-
-Backend variables:
-
-- `PORT`
-- `CORS_ORIGIN`
-- `MONGODB_URI`
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL`
-
-Frontend variables:
-
-- `VITE_API_BASE_URL`
-
-## API routes
-
-- `GET /health`
-- `POST /api/datasets`
-- `GET /api/datasets/current`
-- `DELETE /api/datasets/current`
-- `POST /api/chat`
-
-If `GEMINI_API_KEY` is missing, the backend still works and returns deterministic fallback analysis based on dataset summaries.
-
-For local development, leave `VITE_API_BASE_URL` empty so frontend requests go through the Vite proxy and avoid LAN CORS issues.
+- CSV/Excel dataset upload and analysis
+- Natural language data querying
+- AI-powered insights via Google Gemini
+- Interactive visualizations and dashboards

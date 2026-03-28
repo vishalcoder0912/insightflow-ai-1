@@ -1,24 +1,10 @@
-import { useEffect, useState, useId } from "react";
-import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Area, AreaChart, ScatterChart, Scatter, RadarChart, Radar,
-  PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  ComposedChart, Legend,
-} from "recharts";
+import { memo, useEffect, useId, useMemo, useState } from "react";
+import { ResponsiveContainer } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings2, Palette, Type, ChevronDown } from "lucide-react";
-import { CHART_TYPE_OPTIONS, PRESET_PALETTES, type ChartType } from "@/features/dashboard/components/charts/chartOptions";
-
-const tooltipStyle = {
-  contentStyle: {
-    backgroundColor: "hsl(222 40% 10%)",
-    border: "1px solid hsl(217 30% 15%)",
-    borderRadius: "10px",
-    fontSize: "12px",
-    color: "hsl(210 20% 92%)",
-  },
-};
+import { CHART_TYPE_OPTIONS, PRESET_PALETTES, resolvePaletteName, type ChartType } from "@/features/dashboard/components/charts/chartOptions";
+import { ChartRenderer } from "@/charts/ChartRenderer";
+import { normalizeRechartsRows, type LabelDatasetChartInput, type NormalizedChartRow } from "@/charts/chartDataUtils";
 
 export interface ChartConfig {
   xLabel?: string;
@@ -27,21 +13,23 @@ export interface ChartConfig {
   showGrid?: boolean;
   showLegend?: boolean;
   curved?: boolean;
+  seriesKeys?: string[];
 }
 
 interface ChartPanelProps {
   title: string;
   subtitle?: string;
   type: ChartType;
-  data: any[];
+  data: Array<Record<string, unknown>> | LabelDatasetChartInput;
   dataKey: string;
   xKey?: string;
   config?: ChartConfig;
   editable?: boolean;
   hideHeader?: boolean;
+  chartHeightClass?: string;
 }
 
-export default function ChartPanel({
+function ChartPanel({
   title,
   subtitle,
   type: initialType,
@@ -51,6 +39,7 @@ export default function ChartPanel({
   config: initialConfig,
   editable = true,
   hideHeader = false,
+  chartHeightClass,
 }: ChartPanelProps) {
   const gradId = useId();
   const [showSettings, setShowSettings] = useState(false);
@@ -58,11 +47,11 @@ export default function ChartPanel({
   const [config, setConfig] = useState<ChartConfig>({
     xLabel: "",
     yLabel: "",
-    palette: "Mixed",
     showGrid: true,
     showLegend: false,
     curved: true,
     ...initialConfig,
+    palette: resolvePaletteName(initialConfig?.palette),
   });
 
   useEffect(() => {
@@ -73,111 +62,34 @@ export default function ChartPanel({
     setConfig((prev) => ({
       ...prev,
       ...initialConfig,
+      palette: resolvePaletteName(initialConfig?.palette ?? prev.palette),
     }));
   }, [initialConfig]);
 
-  const colors = PRESET_PALETTES[config.palette || "Mixed"];
-  const curveType = config.curved ? "monotone" : "linear";
+  const normalizedData = useMemo(
+    () => normalizeRechartsRows(data, xKey, dataKey, chartType, config.seriesKeys),
+    [chartType, config.seriesKeys, data, dataKey, xKey],
+  );
+  
+  const hasData = !("error" in normalizedData) && normalizedData.length > 0;
+  const shouldRenderChart = hasData;
 
-  const axisProps = {
-    tick: { fontSize: 11, fill: "hsl(215 16% 65%)" },
-    axisLine: false as const,
-    tickLine: false as const,
-  };
+  const chartRows = useMemo<NormalizedChartRow[]>(
+    () => (hasData ? normalizedData : []),
+    [hasData, normalizedData],
+  );
 
-  const renderChart = () => {
-    switch (chartType) {
-      case "bar":
-        return (
-          <BarChart data={data}>
-            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 30% 18%)" />}
-            <XAxis dataKey={xKey} {...axisProps} label={config.xLabel ? { value: config.xLabel, position: "insideBottom", offset: -2, fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <YAxis {...axisProps} label={config.yLabel ? { value: config.yLabel, angle: -90, position: "insideLeft", fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <Tooltip {...tooltipStyle} />
-            {config.showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            <Bar dataKey={dataKey} fill={colors[0]} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        );
-      case "line":
-        return (
-          <LineChart data={data}>
-            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 30% 18%)" />}
-            <XAxis dataKey={xKey} {...axisProps} label={config.xLabel ? { value: config.xLabel, position: "insideBottom", offset: -2, fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <YAxis {...axisProps} label={config.yLabel ? { value: config.yLabel, angle: -90, position: "insideLeft", fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <Tooltip {...tooltipStyle} />
-            {config.showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            <Line type={curveType} dataKey={dataKey} stroke={colors[0]} strokeWidth={2} dot={{ r: 3, fill: colors[0] }} />
-          </LineChart>
-        );
-      case "area":
-        return (
-          <AreaChart data={data}>
-            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 30% 18%)" />}
-            <XAxis dataKey={xKey} {...axisProps} label={config.xLabel ? { value: config.xLabel, position: "insideBottom", offset: -2, fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <YAxis {...axisProps} label={config.yLabel ? { value: config.yLabel, angle: -90, position: "insideLeft", fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <Tooltip {...tooltipStyle} />
-            {config.showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            <defs>
-              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={colors[0]} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={colors[0]} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <Area type={curveType} dataKey={dataKey} stroke={colors[0]} fill={`url(#${gradId})`} strokeWidth={2} />
-          </AreaChart>
-        );
-      case "pie":
-        return (
-          <PieChart>
-            <Tooltip {...tooltipStyle} />
-            {config.showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            <Pie data={data} dataKey={dataKey} nameKey={xKey} cx="50%" cy="50%" innerRadius={50} outerRadius={80} strokeWidth={0}>
-              {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
-            </Pie>
-          </PieChart>
-        );
-      case "scatter":
-        return (
-          <ScatterChart>
-            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 30% 18%)" />}
-            <XAxis dataKey={xKey} type="category" {...axisProps} label={config.xLabel ? { value: config.xLabel, position: "insideBottom", offset: -2, fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <YAxis dataKey={dataKey} type="number" {...axisProps} label={config.yLabel ? { value: config.yLabel, angle: -90, position: "insideLeft", fontSize: 10, fill: "hsl(215 16% 65%)" } : undefined} />
-            <Tooltip {...tooltipStyle} />
-            <Scatter data={data} fill={colors[0]} />
-          </ScatterChart>
-        );
-      case "radar":
-        return (
-          <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
-            <PolarGrid stroke="hsl(217 30% 18%)" />
-            <PolarAngleAxis dataKey={xKey} tick={{ fontSize: 10, fill: "#4b5563" }} />
-            <PolarRadiusAxis tick={{ fontSize: 9, fill: "#4b5563" }} />
-            <Tooltip {...tooltipStyle} />
-            <Radar dataKey={dataKey} stroke={colors[0]} fill={colors[0]} fillOpacity={0.25} />
-          </RadarChart>
-        );
-      case "composed":
-        return (
-          <ComposedChart data={data}>
-            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 30% 18%)" />}
-            <XAxis dataKey={xKey} {...axisProps} />
-            <YAxis {...axisProps} />
-            <Tooltip {...tooltipStyle} />
-            {config.showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            <Bar dataKey={dataKey} fill={colors[1]} radius={[4, 4, 0, 0]} opacity={0.5} />
-            <Line type={curveType} dataKey={dataKey} stroke={colors[0]} strokeWidth={2} dot={false} />
-          </ComposedChart>
-        );
-    }
-  };
-
-  const hasData = Array.isArray(data) && data.length > 0;
+  const renderedChart = useMemo(
+    () =>
+      shouldRenderChart ? <ChartRenderer chartType={chartType} data={chartRows} dataKey={dataKey} xKey={xKey} config={config} gradId={gradId} /> : null,
+    [chartRows, chartType, config, dataKey, gradId, shouldRenderChart, xKey],
+  );
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card/70 backdrop-blur-sm rounded-2xl border border-border/70 p-4 shadow-sm transition-all hover:scale-[1.01] hover:border-primary/40 hover:shadow-[0_0_30px_hsl(217_91%_60%_/_0.2)]"
+      className="w-full bg-card/70 backdrop-blur-sm rounded-2xl border border-border/70 p-4 shadow-sm transition-all hover:scale-[1.01] hover:border-primary/40 hover:shadow-[0_0_30px_hsl(217_91%_60%_/_0.2)]"
     >
       {!hideHeader && (
         <div className="flex items-start justify-between mb-4">
@@ -304,10 +216,10 @@ export default function ChartPanel({
         )}
       </AnimatePresence>
 
-      <div className="h-52">
-        {hasData ? (
+      <div className={chartHeightClass || "h-52"}>
+        {shouldRenderChart ? (
           <ResponsiveContainer width="100%" height="100%">
-            {renderChart()}
+            {renderedChart}
           </ResponsiveContainer>
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground border border-dashed border-border rounded-lg">
@@ -319,4 +231,4 @@ export default function ChartPanel({
   );
 }
 
-
+export default memo(ChartPanel);

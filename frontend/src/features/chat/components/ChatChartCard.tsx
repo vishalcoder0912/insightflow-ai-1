@@ -1,22 +1,12 @@
-import { useMemo, useState } from "react";
-import ChartPanel from "@/features/dashboard/components/charts/ChartPanel";
-import { CHART_TYPE_OPTIONS, PRESET_PALETTES } from "@/features/dashboard/components/charts/chartOptions";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { CHART_TYPE_OPTIONS, PRESET_PALETTES, resolvePaletteName } from "@/features/dashboard/components/charts/chartOptions";
 import type { ChatChartPayload, ChatTablePayload } from "@/shared/types/dataset";
+import ChartPanel from "@/features/dashboard/components/charts/ChartPanel";
 
 const PALETTE_KEYS = Object.keys(PRESET_PALETTES);
 const CHAT_CHART_TYPES = CHART_TYPE_OPTIONS.filter((opt) =>
   ["bar", "line", "area", "pie", "scatter"].includes(opt.value),
 );
-
-const normalizePalette = (palette?: string) => {
-  if (!palette) return "Cyan";
-  const lower = palette.toLowerCase();
-  if (lower in { cyan: true, blue: true }) return "Cyan";
-  if (lower in { amber: true, orange: true }) return "Amber";
-  if (lower in { emerald: true, green: true }) return "Emerald";
-  if (lower in { rose: true, pink: true }) return "Rose";
-  return PALETTE_KEYS.find((key) => key.toLowerCase() === lower) || "Cyan";
-};
 
 const isNumeric = (value: unknown) => Number.isFinite(Number(value));
 
@@ -30,7 +20,7 @@ export default function ChatChartCard({ payload, table }: ChatChartCardProps) {
     () => ({
       xLabel: payload.config?.xLabel || payload.xKey,
       yLabel: payload.config?.yLabel || payload.yKey,
-      palette: normalizePalette(payload.config?.palette),
+      palette: resolvePaletteName(payload.config?.palette),
       showGrid: payload.config?.showGrid ?? true,
       showLegend: payload.config?.showLegend ?? false,
       curved: payload.config?.curved ?? false,
@@ -43,6 +33,14 @@ export default function ChatChartCard({ payload, table }: ChatChartCardProps) {
   const [yKey, setYKey] = useState(payload.yKey);
   const [config, setConfig] = useState(baseConfig);
   const [showTable, setShowTable] = useState(false);
+
+  useEffect(() => {
+    setChartType(payload.chartType);
+    setXKey(payload.xKey);
+    setYKey(payload.yKey);
+    setConfig(baseConfig);
+    setShowTable(false);
+  }, [baseConfig, payload.chartType, payload.xKey, payload.yKey, payload.title]);
 
   const rowKeys = useMemo(
     () =>
@@ -63,7 +61,7 @@ export default function ChatChartCard({ payload, table }: ChatChartCardProps) {
   const availableTable = table || (payload.rows.length ? { columns: rowKeys, rows: payload.rows } : null);
 
   return (
-    <div className="mt-3 rounded-xl border border-border/70 bg-card/60 p-3 space-y-3">
+    <div className="mt-3 w-full rounded-xl border border-border/70 bg-card/60 p-3 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-foreground">{payload.title}</p>
         <button
@@ -74,16 +72,24 @@ export default function ChatChartCard({ payload, table }: ChatChartCardProps) {
         </button>
       </div>
 
-      <ChartPanel
-        title={payload.title}
-        type={chartType}
-        data={payload.rows}
-        dataKey={yKey}
-        xKey={xKey}
-        config={config}
-        editable={false}
-        hideHeader
-      />
+      <Suspense
+        fallback={
+          <div className="flex h-52 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+            Loading chart...
+          </div>
+        }
+      >
+        <ChartPanel
+          title={payload.title}
+          type={chartType}
+          data={payload.rows}
+          dataKey={yKey}
+          xKey={xKey}
+          config={config}
+          editable={false}
+          hideHeader
+        />
+      </Suspense>
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-xs text-muted-foreground flex flex-col gap-1">

@@ -1,12 +1,15 @@
-import { useMemo, useState } from "react";
-import ChartPanel from "@/features/dashboard/components/charts/ChartPanel";
-import { CHART_TYPE_OPTIONS, PRESET_PALETTES } from "@/features/dashboard/components/charts/chartOptions";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { CHART_TYPE_OPTIONS, PRESET_PALETTES, resolvePaletteName } from "@/features/dashboard/components/charts/chartOptions";
 import type { ChatChartPayload, DatasetChart } from "@/shared/types/dataset";
+import ChartPanel from "@/features/dashboard/components/charts/ChartPanel";
 
 type MiniChart = ChatChartPayload | DatasetChart | null | undefined;
 
 const isDatasetChart = (chart: MiniChart): chart is DatasetChart =>
-  !!chart && "type" in chart && "dataKey" in chart && Array.isArray(chart.data);
+  !!chart &&
+  "type" in chart &&
+  "dataKey" in chart &&
+  (Array.isArray(chart.data) || (Array.isArray(chart.labels) && Array.isArray(chart.datasets)));
 
 const isChatChart = (chart: MiniChart): chart is ChatChartPayload =>
   !!chart && "chartType" in chart && "xKey" in chart && "yKey" in chart && Array.isArray(chart.rows);
@@ -14,6 +17,7 @@ const isChatChart = (chart: MiniChart): chart is ChatChartPayload =>
 const toDatasetChart = (chart: ChatChartPayload): DatasetChart => ({
   title: chart.title,
   type: chart.chartType,
+  xKey: chart.xKey,
   dataKey: "value",
   data: chart.rows.map((row) => ({
     name: row[chart.xKey] as string | number,
@@ -24,17 +28,11 @@ const toDatasetChart = (chart: ChatChartPayload): DatasetChart => ({
 const isSupportedType = (type: string) => ["bar", "line", "pie", "area", "scatter"].includes(type);
 
 const isValidChart = (chart: DatasetChart) =>
-  isSupportedType(chart.type) && Array.isArray(chart.data) && chart.data.length > 0;
-
-const normalizePalette = (palette?: string) => {
-  if (!palette) return "Cyan";
-  const lower = palette.toLowerCase();
-  if (lower in { cyan: true, blue: true }) return "Cyan";
-  if (lower in { amber: true, orange: true }) return "Amber";
-  if (lower in { emerald: true, green: true }) return "Emerald";
-  if (lower in { rose: true, pink: true }) return "Rose";
-  return Object.keys(PRESET_PALETTES).find((key) => key.toLowerCase() === lower) || "Cyan";
-};
+  isSupportedType(chart.type) &&
+  (
+    (Array.isArray(chart.data) && chart.data.length > 0) ||
+    (Array.isArray(chart.labels) && Array.isArray(chart.datasets) && chart.labels.length > 0 && chart.datasets.length > 0)
+  );
 
 export default function MiniChartCard({
   chart,
@@ -43,24 +41,45 @@ export default function MiniChartCard({
   chart: MiniChart;
   showControls?: boolean;
 }) {
-  if (!chart) return null;
+  const normalized = useMemo(() => {
+    if (!chart) return null;
+    const candidate = isChatChart(chart) ? toDatasetChart(chart) : chart;
+    return isDatasetChart(candidate) && isValidChart(candidate) ? candidate : null;
+  }, [chart]);
 
-  const normalized = isChatChart(chart) ? toDatasetChart(chart) : chart;
-  if (!isDatasetChart(normalized) || !isValidChart(normalized)) return null;
+  const paletteDefault = useMemo(
+    () => (isChatChart(chart) ? resolvePaletteName(chart.config?.palette) : "Cyan"),
+    [chart],
+  );
 
-  const limitedData = normalized.data.slice(0, 8);
-  const paletteDefault = isChatChart(chart) ? normalizePalette(chart.config?.palette) : "Cyan";
-
-  const [chartType, setChartType] = useState(normalized.type);
-  const [palette, setPalette] = useState(paletteDefault);
+  const [chartType, setChartType] = useState<DatasetChart["type"]>("bar");
+  const [palette, setPalette] = useState("Cyan");
 
   const chartOptions = useMemo(
     () => CHART_TYPE_OPTIONS.filter((opt) => isSupportedType(opt.value)),
     [],
   );
 
+  useEffect(() => {
+    if (!normalized) return;
+    setChartType(normalized.type);
+    setPalette(paletteDefault);
+  }, [normalized, paletteDefault]);
+
+  if (!normalized) return null;
+
+  const limitedData = Array.isArray(normalized.data)
+    ? normalized.data.slice(0, 8)
+    : {
+        labels: normalized.labels?.slice(0, 8) ?? [],
+        datasets: normalized.datasets?.map((dataset) => ({
+          ...dataset,
+          data: dataset.data?.slice(0, 8) ?? [],
+        })) ?? [],
+      };
+
   return (
-    <div className="mt-2 rounded-lg border border-border/60 bg-card/60 p-2">
+    <div className="mt-2 w-full rounded-lg border border-border/60 bg-card/60 p-2">
       {showControls && (
         <div className="mb-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
           <label className="flex items-center gap-1">
@@ -94,15 +113,25 @@ export default function MiniChartCard({
         </div>
       )}
       <div className="h-40">
-        <ChartPanel
-          title={normalized.title}
-          type={chartType}
-          data={limitedData}
-          dataKey={normalized.dataKey}
-          config={{ xLabel: "", yLabel: "", palette }}
-          editable={false}
-          hideHeader
-        />
+        <Suspense
+          fallback={
+            <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+              Loading chart...
+            </div>
+          }
+        >
+          <ChartPanel
+            title={normalized.title}
+            type={chartType}
+            data={limitedData}
+            dataKey={normalized.dataKey}
+            xKey={normalized.xKey}
+            config={{ xLabel: "", yLabel: "", palette }}
+            editable={false}
+            hideHeader
+            chartHeightClass="h-32"
+          />
+        </Suspense>
       </div>
     </div>
   );
