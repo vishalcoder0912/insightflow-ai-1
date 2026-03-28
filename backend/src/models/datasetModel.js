@@ -38,6 +38,7 @@ const normalizeDatasetPayload = (data = {}) => {
   const previewRows = Array.isArray(data.previewRows) ? data.previewRows : rows.slice(0, 100);
 
   return {
+    slug: String(data.slug ?? data.id ?? "current"),
     fileName: String(data.fileName ?? ""),
     uploadedAt: data.uploadedAt ? new Date(data.uploadedAt) : new Date(),
     headers,
@@ -55,47 +56,54 @@ const toDatasetRecord = (row) => {
   const datasetRows = Array.isArray(row.rows) ? row.rows : [];
 
   return {
-    id: row.id,
-    fileName: row.fileName,
+    id: row.slug,
+    slug: row.slug,
+    fileName: row.file_name,
     uploadedAt:
-      row.uploadedAt instanceof Date ? row.uploadedAt.toISOString() : String(row.uploadedAt),
+      row.uploaded_at instanceof Date ? row.uploaded_at.toISOString() : String(row.uploaded_at),
     headers,
     rows: datasetRows,
-    totalRows: Number(row.totalRows ?? datasetRows.length),
-    previewRows: Array.isArray(row.previewRows) ? row.previewRows : [],
+    totalRows: Number(row.total_rows ?? datasetRows.length),
+    previewRows: Array.isArray(row.preview_rows) ? row.preview_rows : [],
     records: buildRecordsFromRows(datasetRows, headers),
     summary: row.summary ?? defaultSummary,
-    createdAt:
-      row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
-    updatedAt:
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   };
 };
 
 export const createDataset = async (data, client) => {
   const payload = normalizeDatasetPayload(data);
+
   const result = await query(
     `INSERT INTO datasets (
-      "fileName",
-      "uploadedAt",
+      slug,
+      file_name,
+      uploaded_at,
       headers,
       rows,
-      "totalRows",
-      "previewRows",
+      total_rows,
+      preview_rows,
       summary
-    ) VALUES ($1, $2, $3::json, $4::json, $5, $6::json, $7::json)
+    ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8::jsonb)
+    ON CONFLICT (slug) DO UPDATE
+    SET
+      file_name = EXCLUDED.file_name,
+      uploaded_at = EXCLUDED.uploaded_at,
+      headers = EXCLUDED.headers,
+      rows = EXCLUDED.rows,
+      total_rows = EXCLUDED.total_rows,
+      preview_rows = EXCLUDED.preview_rows,
+      summary = EXCLUDED.summary
     RETURNING
-      id,
-      "fileName",
-      "uploadedAt",
+      slug,
+      file_name,
+      uploaded_at,
       headers,
       rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"`,
+      total_rows,
+      preview_rows,
+      summary`,
     [
+      payload.slug,
       payload.fileName,
       payload.uploadedAt,
       JSON.stringify(payload.headers),
@@ -110,22 +118,20 @@ export const createDataset = async (data, client) => {
   return toDatasetRecord(result.rows[0]);
 };
 
-export const getDataset = async (id, client) => {
+export const getDataset = async (slug, client) => {
   const result = await query(
     `SELECT
-      id,
-      "fileName",
-      "uploadedAt",
+      slug,
+      file_name,
+      uploaded_at,
       headers,
       rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"
+      total_rows,
+      preview_rows,
+      summary
      FROM datasets
-     WHERE id = $1`,
-    [id],
+     WHERE slug = $1`,
+    [slug],
     client,
   );
 
@@ -135,18 +141,16 @@ export const getDataset = async (id, client) => {
 export const getCurrentDataset = async (client) => {
   const result = await query(
     `SELECT
-      id,
-      "fileName",
-      "uploadedAt",
+      slug,
+      file_name,
+      uploaded_at,
       headers,
       rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"
+      total_rows,
+      preview_rows,
+      summary
      FROM datasets
-     ORDER BY "uploadedAt" DESC, id DESC
+     ORDER BY uploaded_at DESC, slug DESC
      LIMIT 1`,
     [],
     client,
@@ -155,89 +159,22 @@ export const getCurrentDataset = async (client) => {
   return toDatasetRecord(result.rows[0]);
 };
 
-export const updateDataset = async (id, data, client) => {
-  const current = await getDataset(id, client);
-  if (!current) return null;
-
-  const payload = normalizeDatasetPayload({ ...current, ...data });
-  const result = await query(
-    `UPDATE datasets
-     SET
-      "fileName" = $2,
-      "uploadedAt" = $3,
-      headers = $4::json,
-      rows = $5::json,
-      "totalRows" = $6,
-      "previewRows" = $7::json,
-      summary = $8::json
-     WHERE id = $1
-     RETURNING
-      id,
-      "fileName",
-      "uploadedAt",
-      headers,
-      rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"`,
-    [
-      id,
-      payload.fileName,
-      payload.uploadedAt,
-      JSON.stringify(payload.headers),
-      JSON.stringify(payload.rows),
-      payload.totalRows,
-      JSON.stringify(payload.previewRows),
-      JSON.stringify(payload.summary),
-    ],
-    client,
-  );
-
-  return toDatasetRecord(result.rows[0]);
-};
-
-export const deleteDataset = async (id, client) => {
+export const deleteDataset = async (slug, client) => {
   const result = await query(
     `DELETE FROM datasets
-     WHERE id = $1
+     WHERE slug = $1
      RETURNING
-      id,
-      "fileName",
-      "uploadedAt",
+      slug,
+      file_name,
+      uploaded_at,
       headers,
       rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"`,
-    [id],
+      total_rows,
+      preview_rows,
+      summary`,
+    [slug],
     client,
   );
 
   return toDatasetRecord(result.rows[0]);
-};
-
-export const getAllDatasets = async (client) => {
-  const result = await query(
-    `SELECT
-      id,
-      "fileName",
-      "uploadedAt",
-      headers,
-      rows,
-      "totalRows",
-      "previewRows",
-      summary,
-      "createdAt",
-      "updatedAt"
-     FROM datasets
-     ORDER BY "uploadedAt" DESC, id DESC`,
-    [],
-    client,
-  );
-
-  return result.rows.map(toDatasetRecord);
 };

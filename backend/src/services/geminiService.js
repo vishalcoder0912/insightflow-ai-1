@@ -1,119 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { env, isGeminiConfigured } from "../config/env.js";
+import { env } from "../config/env.js";
 
-const VALID_CHART_TYPES = new Set(["bar", "line", "pie", "area", "scatter"]);
-
-let modelInstance;
-
-const getModel = () => {
-  if (!isGeminiConfigured) {
-    return null;
-  }
-
-  if (!modelInstance) {
-    const client = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    modelInstance = client.getGenerativeModel({ model: env.GEMINI_MODEL });
-  }
-
-  return modelInstance;
-};
-
-const stripCodeFences = (value) =>
-  String(value ?? "")
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-const extractJsonObject = (value) => {
-  const text = stripCodeFences(value);
-  const match = text.match(/\{[\s\S]*\}/);
-  return {
-    text,
-    json: match?.[0] ?? null,
-  };
-};
-
-const normalizeText = (value) => String(value ?? "").trim();
-
-const normalizeTable = (table) => {
-  if (!table || typeof table !== "object") return null;
-  if (!Array.isArray(table.columns) || !Array.isArray(table.rows)) return null;
-
-  return {
-    columns: table.columns.map((column) => String(column)),
-    rows: table.rows,
-  };
-};
-
-const toChartPoint = (point, index = 0) => {
-  if (!point || typeof point !== "object") {
-    return null;
-  }
-
-  const rawLabel = point.name ?? point.label ?? point.x ?? point.period ?? point.category;
-  const rawValue = point.value ?? point.y;
-  const label = normalizeText(rawLabel || `Item ${index + 1}`);
-  const value = typeof rawValue === "number" ? rawValue : Number(rawValue);
-
-  if (!label || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return {
-    ...point,
-    name: label,
-    value: Number(value),
-    x: normalizeText(point.x ?? label),
-    label: normalizeText(point.label ?? label),
-  };
-};
-
-const validateChart = (chart) => {
-  if (!chart || typeof chart !== "object") {
-    return null;
-  }
-
-  let points = [];
-  if (Array.isArray(chart.data)) {
-    points = chart.data;
-  } else if (Array.isArray(chart.rows)) {
-    const xKey = normalizeText(chart.xKey || "name");
-    const yKey = normalizeText(chart.yKey || chart.dataKey || "value");
-    points = chart.rows.map((row) => ({
-      ...row,
-      name: row?.[xKey] ?? row?.name ?? row?.label ?? row?.x,
-      value: row?.[yKey] ?? row?.value ?? row?.y,
-      x: row?.[xKey] ?? row?.x ?? row?.name,
-      label: row?.label ?? row?.[xKey] ?? row?.name,
-    }));
-  }
-
-  const validData = points
-    .map((point, index) => toChartPoint(point, index))
-    .filter(Boolean);
-
-  if (!validData.length) {
-    return null;
-  }
-
-  const rawType = normalizeText(chart.type || chart.chartType || "bar").toLowerCase();
-  const type = VALID_CHART_TYPES.has(rawType) ? rawType : "bar";
-
-  return {
-    title: normalizeText(chart.title || "Chart"),
-    type,
-    xKey: normalizeText(chart.xKey || "name"),
-    dataKey: normalizeText(chart.dataKey || chart.yKey || "value"),
-    data: validData.slice(0, 8),
-    config: chart.config && typeof chart.config === "object" ? chart.config : {},
-  };
-};
-
-const buildDatasetPrompt = ({ dataset, question, history = [] }) => {
-  const summary = dataset.summary ?? {};
-  const preview = Array.isArray(dataset.previewRows) ? dataset.previewRows.slice(0, 8) : [];
-  const recentHistory = Array.isArray(history) ? history.slice(-6) : [];
+const buildDatasetPrompt = ({ dataset, question }) => {
+  const summary = dataset.summary;
+  const preview = dataset.previewRows.slice(0, 8);
 
   return `
 You are an expert analytics assistant for CSV datasets. Your role is to:
@@ -132,13 +21,10 @@ ${JSON.stringify(summary, null, 2)}
 Preview rows (first 8):
 ${JSON.stringify(preview, null, 2)}
 
-Recent conversation history:
-${JSON.stringify(recentHistory, null, 2)}
-
 User question:
 ${question}
 
-IMPORTANT: You MUST return a JSON object with this EXACT structure:
+IMPORTANT: You MUST return ONLY a valid JSON object with this EXACT structure:
 {
   "answer": "A clear, concise markdown answer to the user's question. Keep it 1-3 sentences.",
   "sql": "Optional SQL query (empty string if not applicable). Use standard SQL syntax.",
@@ -161,156 +47,199 @@ IMPORTANT: You MUST return a JSON object with this EXACT structure:
         "label": "Category B"
       }
     ]
-  },
-  "table": {
-    "columns": ["column1", "column2"],
-    "rows": []
-  },
-  "meta": {
-    "queryIntent": "summary",
-    "confidence": 0.8,
-    "sql_source": "gemini"
   }
 }
 
-CHART DATA REQUIREMENTS:
-- data array must have 3-8 points for optimal visualization
-- Each data point MUST have these fields:
-  * "name": string - the category or label name
-  * "value": number - the numeric value to plot
-  * "x": string - x-axis label (can be same as name)
-  * "label": string - tooltip or legend label (can be same as name)
-- All numbers in value must be valid numbers, not strings
+REQUIREMENTS:
+- Return ONLY valid JSON, no markdown formatting
+- data array must have 3-8 points
+- Each data point MUST have: name, value, x, label (all required)
+- All numbers must be valid (not strings)
 - Chart type must be one of: bar, line, pie, area, scatter
-- If no chart is appropriate, return null for chart
-
-ANSWER REQUIREMENTS:
-- Be concise and data-driven
-- Reference specific numbers from the data
-- Use markdown formatting where useful
-- If you cannot answer, explain why
-
-INSIGHTS REQUIREMENTS:
-- Return 2-4 key insights
-- Each insight should be brief and specific
-- Include concrete numbers when possible
-
-SQL REQUIREMENTS:
-- Only include SQL if relevant
-- Use standard SQL
-- Return empty string if not applicable
-- Use column names exactly as provided
-
-Return JSON only.
+- If no chart is needed, return null for chart field
+- Keep answer concise and data-driven
+- Include specific numbers from the data
+- Return 2-4 insights, each 1-2 sentences
   `.trim();
 };
 
-const parseGeminiResponse = (rawText) => {
-  const { text, json } = extractJsonObject(rawText);
+const validateChart = (chart) => {
+  if (!chart || typeof chart !== "object") {
+    return null;
+  }
+
+  if (!Array.isArray(chart.data) || chart.data.length === 0) {
+    return null;
+  }
+
+  const validData = chart.data
+    .filter((point) => {
+      if (!point || typeof point !== "object") return false;
+
+      const hasLabel = point.name || point.label || point.x;
+      const hasValidValue = typeof point.value === "number" && !Number.isNaN(point.value);
+
+      return hasLabel && hasValidValue;
+    })
+    .map((point) => ({
+      name: String(point.name || point.label || point.x || "Unknown"),
+      value: Number(point.value),
+      x: String(point.x || point.name || point.label || "Unknown"),
+      label: String(point.label || point.name || point.x || "Unknown"),
+    }));
+
+  if (validData.length === 0) {
+    return null;
+  }
+
+  const validTypes = ["bar", "line", "pie", "area", "scatter"];
+  const chartType = String(chart.type || "bar").toLowerCase();
+
+  return {
+    title: String(chart.title || "Chart"),
+    type: validTypes.includes(chartType) ? chartType : "bar",
+    dataKey: String(chart.dataKey || "value"),
+    data: validData,
+  };
+};
+
+const parseGeminiResponse = (payload) => {
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || "")
+    .join("")
+    .trim();
 
   if (!text) {
     throw new Error("Gemini response did not include text output.");
   }
 
-  if (!json) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
     return {
       answer: text,
       sql: "",
       insights: [],
       chart: null,
-      table: null,
-      meta: {},
     };
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(match[0]);
   } catch (error) {
-    console.error("[gemini] failed to parse JSON payload", error);
+    console.error("Failed to parse Gemini response:", error);
     return {
       answer: text,
       sql: "",
       insights: [],
       chart: null,
-      table: null,
-      meta: {},
     };
   }
 
   return {
-    answer:
-      typeof parsed.answer === "string" && parsed.answer.trim()
-        ? parsed.answer
-        : "No answer available.",
+    answer: parsed.answer || "No answer available.",
     sql: typeof parsed.sql === "string" ? parsed.sql : "",
-    insights: Array.isArray(parsed.insights) ? parsed.insights.map((item) => String(item)) : [],
+    insights: Array.isArray(parsed.insights) ? parsed.insights : [],
     chart: validateChart(parsed.chart),
-    table: normalizeTable(parsed.table),
-    meta: parsed.meta && typeof parsed.meta === "object" ? parsed.meta : {},
   };
 };
 
 const generateFallback = ({ dataset, question }) => {
-  const summary = dataset.summary ?? {};
-  const lowerQuestion = String(question ?? "").toLowerCase();
+  const summary = dataset.summary;
+  const lowerQuestion = question.toLowerCase();
+
   const primaryInsight =
     summary.insights?.[0] ||
     `The dataset contains ${dataset.totalRows} rows and ${dataset.headers.length} columns.`;
 
-  const answer = [primaryInsight, ...(summary.insights || []).slice(1, 3)]
-    .filter(Boolean)
-    .join("\n\n")
-    .trim();
+  const answerText = `${primaryInsight}\n\n${(summary.insights || []).slice(1, 3).join("\n")}`.trim();
 
   let sql = "";
   if (lowerQuestion.includes("top") || lowerQuestion.includes("highest")) {
     const numericColumn = summary.columns?.find((column) => column.numeric);
-    if (numericColumn?.name) {
+    if (numericColumn) {
       sql = `SELECT *\nFROM dataset\nORDER BY "${numericColumn.name}" DESC\nLIMIT 5;`;
     }
   }
 
-  const chart = validateChart(summary.chartSuggestions?.[0] ?? null);
+  let fallbackChart = null;
+  if (Array.isArray(summary.chartSuggestions) && summary.chartSuggestions.length > 0) {
+    const suggestion = summary.chartSuggestions[0];
+    const chartData = (suggestion.data || [])
+      .filter((point) => typeof point.value === "number" && !Number.isNaN(point.value))
+      .map((point) => ({
+        name: String(point.name || "Unknown"),
+        value: Number(point.value),
+        x: String(point.x || point.name || "Unknown"),
+        label: String(point.label || point.name || "Unknown"),
+      }));
+
+    if (chartData.length > 0) {
+      fallbackChart = validateChart({
+        title: suggestion.title || "Data Visualization",
+        type: suggestion.type || "bar",
+        dataKey: suggestion.dataKey || "value",
+        data: chartData,
+      });
+    }
+  }
 
   return {
-    answer: answer || "No answer available.",
+    answer: answerText,
     sql,
-    insights: Array.isArray(summary.insights) ? summary.insights : [],
-    chart,
-    table: null,
-    meta: {
-      queryIntent: "fallback",
-      confidence: 0.35,
-      sql_source: "fallback",
-    },
+    insights: summary.insights || [],
+    chart: fallbackChart,
     source: "fallback",
   };
 };
 
-export const generateDatasetAnswer = async ({ message, question = message, dataset, history = [] }) => {
-  const model = getModel();
-  if (!model) {
+export const generateDatasetAnswer = async ({ dataset, question }) => {
+  if (!env.geminiApiKey) {
+    console.log("No Gemini API key, using fallback response.");
     return generateFallback({ dataset, question });
   }
 
   try {
-    const prompt = buildDatasetPrompt({ dataset, question, history });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const parsed = parseGeminiResponse(text);
+    const response = await fetch(
+      `${env.geminiApiUrl}/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: buildDatasetPrompt({ dataset, question }) }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Gemini API error ${response.status}:`, text.slice(0, 200));
+      return generateFallback({ dataset, question });
+    }
+
+    const payload = await response.json();
+    const result = parseGeminiResponse(payload);
 
     return {
-      answer: parsed.answer || "No answer available.",
-      sql: parsed.sql || "",
-      insights: parsed.insights || [],
-      chart: parsed.chart || null,
-      table: parsed.table || null,
-      meta: parsed.meta || {},
+      answer: result.answer || "No answer available.",
+      sql: result.sql || "",
+      insights: result.insights || [],
+      chart: result.chart || null,
       source: "gemini",
     };
   } catch (error) {
-    console.error("[gemini] failed to generate dataset answer", error);
+    console.error("Error calling Gemini API:", error);
     return generateFallback({ dataset, question });
   }
 };

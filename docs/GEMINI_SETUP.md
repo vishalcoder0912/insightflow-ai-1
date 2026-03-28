@@ -174,7 +174,7 @@ const { generateContent, error } = useGemini({
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 // ❌ DON'T: Hard-code keys
-const apiKey = "AIzaSy_YOUR_KEY"; // Never!
+const apiKey = "<your_gemini_api_key>"; // Never hardcode real keys
 
 // ✅ DO: Use the context provider
 import { useApiKey } from '@/context/ApiKeyContext';
@@ -191,7 +191,7 @@ const result = validateApiKey(apiKey);
 Create `.env.local`:
 
 ```env
-VITE_GEMINI_API_KEY=AIzaSy_your_key
+VITE_GEMINI_API_KEY=<your_gemini_api_key>
 VITE_GEMINI_RATE_LIMIT=30
 VITE_GEMINI_REQUEST_INTERVAL=100
 VITE_GEMINI_DEBUG=false

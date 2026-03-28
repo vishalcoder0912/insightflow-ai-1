@@ -1,10 +1,16 @@
 import pg from "pg";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { env, resolvedDatabaseConfig } from "../config/env.js";
 
 const { Pool } = pg;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let pool;
 let connectionPromise;
+let schemaReadyPromise;
 
 const createPool = () => {
   const instance = new Pool({
@@ -60,6 +66,26 @@ export const connectToDatabase = async () => {
     });
 
   return connectionPromise;
+};
+
+export const initializeDatabase = async () => {
+  if (schemaReadyPromise) {
+    return schemaReadyPromise;
+  }
+
+  schemaReadyPromise = (async () => {
+    const activePool = await connectToDatabase();
+    const schemaPath = path.resolve(__dirname, "./schema.sql");
+    const schemaSql = await fs.readFile(schemaPath, "utf8");
+    await activePool.query(schemaSql);
+    console.info("[postgres] schema ready");
+    return activePool;
+  })().catch((error) => {
+    schemaReadyPromise = undefined;
+    throw error;
+  });
+
+  return schemaReadyPromise;
 };
 
 export const query = async (text, params = [], client) => {

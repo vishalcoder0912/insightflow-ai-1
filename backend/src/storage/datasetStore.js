@@ -1,44 +1,61 @@
-import { createDataset, deleteDataset, getCurrentDataset } from "../models/datasetModel.js";
-import { connectToDatabase, withTransaction } from "./database.js";
+import {
+  createDataset,
+  deleteDataset,
+  getCurrentDataset as getCurrentDatasetRecord,
+} from "../models/datasetModel.js";
+import { connectToDatabase } from "./database.js";
 
 export const saveDataset = async (dataset) => {
-  const record = await withTransaction(async (client) => {
-    const currentDataset = await getCurrentDataset(client);
+  try {
+    await connectToDatabase();
 
-    if (currentDataset) {
-      await deleteDataset(currentDataset.id, client);
+    const existing = await getCurrentDatasetRecord();
+    if (existing?.id) {
+      await deleteDataset(existing.id);
     }
 
-    return createDataset(dataset, client);
-  });
-
-  console.info(`[datasetStore] saved dataset ${record.fileName}`);
-  return record;
+    return await createDataset(dataset);
+  } catch (error) {
+    console.error("Error saving dataset:", error);
+    throw new Error("Failed to save dataset to database");
+  }
 };
 
 export const readDataset = async () => {
-  await connectToDatabase();
-  return getCurrentDataset();
+  try {
+    await connectToDatabase();
+
+    const record = await getCurrentDatasetRecord();
+    if (!record) {
+      return null;
+    }
+
+    return {
+      id: String(record.id),
+      fileName: record.fileName,
+      uploadedAt: record.uploadedAt,
+      headers: record.headers,
+      rows: record.rows,
+      totalRows: record.totalRows,
+      previewRows: record.previewRows,
+      summary: record.summary,
+    };
+  } catch (error) {
+    console.error("Error reading dataset:", error);
+    throw new Error("Failed to read dataset from database");
+  }
 };
 
 export const clearDataset = async () => {
-  await withTransaction(async (client) => {
-    const currentDataset = await getCurrentDataset(client);
-    if (currentDataset) {
-      await deleteDataset(currentDataset.id, client);
+  try {
+    await connectToDatabase();
+
+    const existing = await getCurrentDatasetRecord();
+    if (existing?.id) {
+      await deleteDataset(existing.id);
     }
-  });
-
-  console.info("[datasetStore] cleared current dataset");
-  return { success: true };
-};
-
-export const getDatasetForAnalysis = async () => {
-  const dataset = await readDataset();
-  if (!dataset) return null;
-
-  return {
-    ...dataset,
-    records: Array.isArray(dataset.records) ? dataset.records : [],
-  };
+  } catch (error) {
+    console.error("Error clearing dataset:", error);
+    throw new Error("Failed to clear dataset from database");
+  }
 };

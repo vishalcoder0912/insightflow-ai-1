@@ -1,60 +1,9 @@
-import type { ChatChartPayload, ChatResponse, DatasetRecord } from "@/shared/types/dataset";
-import { analyticsTracker } from "@/analytics/tracker";
-import { runLocalDatasetQuery } from "@/ai-engine/analystEngine";
+import type { ChatResponse, DatasetChart, DatasetRecord } from "@/shared/types/dataset";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-type JsonRecord = Record<string, unknown>;
 
-type ApiRequestErrorKind = "network" | "http" | "parse";
-
-class ApiRequestError extends Error {
-  kind: ApiRequestErrorKind;
-  status?: number;
-
-  constructor(message: string, kind: ApiRequestErrorKind, status?: number) {
-    super(message);
-    this.name = "ApiRequestError";
-    this.kind = kind;
-    this.status = status;
-  }
-}
-
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  let response: Response;
-
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      },
-    });
-  } catch {
-    throw new ApiRequestError("Unable to reach the API.", "network");
-  }
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiRequestError(
-      payload?.error || `Request failed with status ${response.status}`,
-      "http",
-      response.status,
-    );
-  }
-
-  try {
-    return (await response.json()) as T;
-  } catch {
-    throw new ApiRequestError("API returned invalid JSON.", "parse", response.status);
-  }
-};
-
-const canUseLocalChatFallback = (error: unknown) =>
-  error instanceof ApiRequestError && error.kind === "network";
-
-const asRecord = (value: unknown): JsonRecord =>
-  value !== null && typeof value === "object" ? (value as JsonRecord) : {};
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
@@ -62,280 +11,125 @@ const asString = (value: unknown, fallback = ""): string =>
   typeof value === "string" ? value : fallback;
 
 const asNumber = (value: unknown, fallback = 0): number => {
-  const numericValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numericValue) ? numericValue : fallback;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const asOptionalNumber = (value: unknown): number | undefined => {
-  if (value === undefined || value === null || value === "") return undefined;
-  const numericValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numericValue) ? numericValue : undefined;
-};
-
-const asBoolean = (value: unknown, fallback = false): boolean =>
-  typeof value === "boolean" ? value : fallback;
-
-const asStringArray = (value: unknown): string[] =>
-  asArray(value).map((item) => String(item));
+const asStringArray = (value: unknown): string[] => asArray(value).map((item) => String(item));
 
 const asStringMatrix = (value: unknown): string[][] =>
   asArray(value).map((row) => asArray(row).map((cell) => String(cell)));
 
-const asPrimitive = (value: unknown): string | number | null => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "string" || typeof value === "number") return value;
-  return String(value);
-};
+const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
 
-const asPrimitiveArray = (value: unknown): Array<string | number | null> =>
-  asArray(value).map((item) => asPrimitive(item));
-
-const toTitleCase = (value: string): string =>
-  value
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-
-const normalizeDomainSummary = (
-  value: unknown,
-): DatasetRecord["summary"]["domain"] | undefined => {
-  if (typeof value === "string" && value.trim()) {
-    const key = value.trim().toLowerCase();
-    const label = toTitleCase(key);
-    return {
-      key,
-      label,
-      confidence: 0.7,
-      matchedColumns: [],
-      description: `Detected dataset domain: ${label}.`,
-    };
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error || `Request failed with status ${response.status}`);
   }
 
-  const domain = asRecord(value);
-  if (!Object.keys(domain).length) return undefined;
-
-  const key = asString(domain.key, "general").toLowerCase();
-  const label = asString(domain.label, toTitleCase(key));
-  const confidence = asNumber(domain.confidence, 0.7);
-  const matchedColumns = asStringArray(domain.matchedColumns ?? domain.matched_columns);
-  const description = asString(
-    domain.description,
-    `Detected dataset domain: ${label}.`,
-  );
-
-  return {
-    key,
-    label,
-    confidence,
-    matchedColumns,
-    description,
-  };
+  return response.json() as Promise<T>;
 };
 
-const normalizeChartType = (
-  value: unknown,
-): "bar" | "line" | "pie" | "area" | "scatter" => {
-  if (
-    value === "bar" ||
-    value === "line" ||
-    value === "pie" ||
-    value === "area" ||
-    value === "scatter"
-  ) {
-    return value;
-  }
-  return "bar";
-};
-
-const normalizeDatasetChartPoint = (
-  value: unknown,
-  index: number,
-): NonNullable<DatasetRecord["summary"]["chartSuggestions"][number]["data"]>[number] | null => {
-  const point = asRecord(value);
-  const rawLabel = point.name ?? point.label ?? point.x ?? `Item ${index + 1}`;
-  const primitiveLabel = asPrimitive(rawLabel);
-  const label = primitiveLabel === null ? `Item ${index + 1}` : String(primitiveLabel);
-  const numericValue = asNumber(point.value ?? point.y, Number.NaN);
-
-  if (!label || !Number.isFinite(numericValue)) {
+const normalizeChart = (chart: unknown): DatasetChart | null => {
+  if (!chart || typeof chart !== "object") {
     return null;
   }
 
-  return {
-    ...point,
-    name: label,
-    value: numericValue,
-    x: asPrimitive(point.x) ?? label,
-    label: asPrimitive(point.label) ?? label,
-    y: asOptionalNumber(point.y),
+  const candidate = chart as Partial<DatasetChart> & {
+    data?: Array<Record<string, unknown>>;
+    chartType?: DatasetChart["type"];
   };
-};
 
-const normalizeDatasetChart = (
-  value: unknown,
-): DatasetRecord["summary"]["chartSuggestions"][number] | null => {
-  const chart = asRecord(value);
-  if (!Object.keys(chart).length) return null;
+  const data = Array.isArray(candidate.data)
+    ? candidate.data
+        .map((point, index) => {
+          const rawLabel = point.name ?? point.label ?? point.x ?? `Item ${index + 1}`;
+          const rawValue = typeof point.value === "number" ? point.value : Number(point.value);
 
-  let data = asArray(chart.data)
-    .map((point, index) => normalizeDatasetChartPoint(point, index))
-    .filter((point): point is NonNullable<typeof point> => Boolean(point));
+          if (!Number.isFinite(rawValue)) {
+            return null;
+          }
 
-  if (!data.length) {
-    const labels = asPrimitiveArray(chart.labels);
-    const datasets = asArray(chart.datasets).map((datasetRaw) => {
-      const dataset = asRecord(datasetRaw);
-      return {
-        label: asString(dataset.label) || undefined,
-        data: asPrimitiveArray(dataset.data),
-      };
-    });
-
-    const primaryDataset = datasets[0];
-    if (labels.length && primaryDataset?.data?.length) {
-      data = labels
-        .map((label, index) =>
-          normalizeDatasetChartPoint(
-            {
-              name: label ?? `Item ${index + 1}`,
-              value: primaryDataset.data?.[index],
-              x: label,
-              label,
-            },
-            index,
-          ),
-        )
-        .filter((point): point is NonNullable<typeof point> => Boolean(point));
-    }
-  }
+          return {
+            ...point,
+            name: String(rawLabel),
+            value: rawValue,
+            x: String(point.x ?? rawLabel),
+            label: String(point.label ?? rawLabel),
+          };
+        })
+        .filter((point): point is NonNullable<typeof point> => Boolean(point))
+    : [];
 
   if (!data.length) {
     return null;
   }
 
   return {
-    title: asString(chart.title, "Chart"),
-    type: normalizeChartType(chart.type ?? chart.chartType ?? chart.chart_type),
-    xKey: asString(chart.xKey ?? chart.x_key, "name"),
-    dataKey: asString(chart.dataKey ?? chart.yKey ?? chart.y_key, "value"),
+    title: candidate.title || "Chart",
+    type: candidate.type || candidate.chartType || "bar",
+    xKey: candidate.xKey || "name",
+    dataKey: candidate.dataKey || "value",
     data,
-    labels: asPrimitiveArray(chart.labels),
-    datasets: asArray(chart.datasets).map((datasetRaw) => {
-      const dataset = asRecord(datasetRaw);
-      return {
-        label: asString(dataset.label) || undefined,
-        data: asPrimitiveArray(dataset.data),
-      };
-    }),
-    config: asRecord(chart.config) as DatasetRecord["summary"]["chartSuggestions"][number]["config"],
   };
 };
 
-const normalizeDatasetRecord = (raw: unknown): DatasetRecord => {
-  const rawRecord = asRecord(raw);
-  const summaryRecord = asRecord(rawRecord.summary);
-  const rawColumns = asArray(summaryRecord.columns);
-  const rawKpis = asArray(summaryRecord.kpis);
-  const rawCharts = asArray(summaryRecord.chartSuggestions ?? summaryRecord.chart_suggestions);
+const normalizeDatasetRecord = (value: unknown): DatasetRecord | null => {
+  if (!value) {
+    return null;
+  }
+
+  const record = asRecord(value);
+  const summary = asRecord(record.summary);
+  const headers = asStringArray(record.headers);
+  const previewRows = asStringMatrix(record.previewRows);
+  const totalRows = asNumber(record.totalRows, previewRows.length);
 
   return {
-    id: asString(rawRecord.id, "current"),
-    fileName: asString(rawRecord.fileName ?? rawRecord.file_name, "uploaded.csv"),
-    uploadedAt: asString(
-      rawRecord.uploadedAt ?? rawRecord.uploaded_at,
-      new Date().toISOString(),
-    ),
-    headers: asStringArray(rawRecord.headers),
-    totalRows: asNumber(rawRecord.totalRows ?? rawRecord.total_rows, 0),
-    previewRows: asStringMatrix(rawRecord.previewRows ?? rawRecord.preview_rows),
+    id: asString(record.id, "current"),
+    fileName: asString(record.fileName, "dataset.csv"),
+    uploadedAt: asString(record.uploadedAt, new Date().toISOString()),
+    headers,
+    totalRows,
+    previewRows,
     summary: {
-      rowCount: asNumber(summaryRecord.rowCount ?? summaryRecord.row_count, 0),
-      columnCount: asNumber(summaryRecord.columnCount ?? summaryRecord.column_count, 0),
-      domain: normalizeDomainSummary(summaryRecord.domain),
-      columns: rawColumns.map((columnRaw) => {
+      rowCount: asNumber(summary.rowCount, totalRows),
+      columnCount: asNumber(summary.columnCount, headers.length),
+      columns: asArray(summary.columns).map((columnRaw) => {
         const column = asRecord(columnRaw);
         return {
           name: asString(column.name),
-          filled: asNumber(column.filled, 0),
-          unique: asNumber(column.unique, 0),
-          sampleValues: asStringArray(column.sampleValues ?? column.sample_values),
-          numeric: asBoolean(column.numeric, false),
-          detectedType: asString(column.detectedType ?? column.detected_type) || undefined,
-          min: asOptionalNumber(column.min),
-          max: asOptionalNumber(column.max),
-          average: asOptionalNumber(column.average),
-          sum: asOptionalNumber(column.sum),
+          filled: asNumber(column.filled),
+          unique: asNumber(column.unique),
+          sampleValues: asStringArray(column.sampleValues),
+          numeric: Boolean(column.numeric),
+          detectedType: asString(column.detectedType) || undefined,
+          min: Number.isFinite(Number(column.min)) ? Number(column.min) : undefined,
+          max: Number.isFinite(Number(column.max)) ? Number(column.max) : undefined,
+          average: Number.isFinite(Number(column.average)) ? Number(column.average) : undefined,
+          sum: Number.isFinite(Number(column.sum)) ? Number(column.sum) : undefined,
         };
       }),
-      kpis: rawKpis.map((kpiRaw) => {
+      kpis: asArray(summary.kpis).map((kpiRaw) => {
         const kpi = asRecord(kpiRaw);
         return {
           label: asString(kpi.label),
-          value: String(kpi.value ?? ""),
-          helperText: asString(kpi.helperText ?? kpi.description),
+          value: asString(kpi.value, String(kpi.value ?? "")),
+          helperText: asString(kpi.helperText),
         };
       }),
-      insights: asStringArray(summaryRecord.insights),
-      chartSuggestions: rawCharts
-        .map((chartRaw) => normalizeDatasetChart(chartRaw))
-        .filter((chart): chart is NonNullable<typeof chart> => Boolean(chart)),
-    },
-  };
-};
-
-const normalizeChatResponse = (response: ChatResponse): ChatResponse => {
-  if (!response.chart || typeof response.chart !== "object") {
-    return response;
-  }
-
-  const chart = response.chart as JsonRecord;
-  const chartType = chart.chartType ?? chart.chart_type;
-  const xKey = chart.xKey ?? chart.x_key;
-  const yKey = chart.yKey ?? chart.y_key;
-
-  if (!chartType || !xKey || !yKey || !Array.isArray(chart.rows)) {
-    const normalizedDatasetChart = normalizeDatasetChart(chart);
-    if (!normalizedDatasetChart) {
-      return {
-        ...response,
-        chart: null,
-      };
-    }
-
-    return {
-      ...response,
-      chart: normalizedDatasetChart,
-    };
-  }
-
-  const normalizedRows = asArray(chart.rows)
-    .map((rowRaw, index) => {
-      const row = asRecord(rowRaw);
-      const primitiveLabel = asPrimitive(row[xKey] ?? row.name ?? row.label ?? row.x);
-      const label = primitiveLabel === null ? `Item ${index + 1}` : String(primitiveLabel);
-      const numericValue = asNumber(row[yKey] ?? row.value ?? row.y, Number.NaN);
-      if (!label || !Number.isFinite(numericValue)) {
-        return null;
-      }
-
-      return {
-        ...row,
-        [asString(xKey)]: label,
-        [asString(yKey)]: numericValue,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => Boolean(row));
-
-  return {
-    ...response,
-    chart: {
-      title: asString(chart.title),
-      chartType: normalizeChartType(chartType),
-      xKey: asString(xKey),
-      yKey: asString(yKey),
-      rows: normalizedRows,
-      config: asRecord(chart.config) as ChatChartPayload["config"],
+      insights: asStringArray(summary.insights),
+      advancedInsights: undefined,
+      chartSuggestions: asArray(summary.chartSuggestions)
+        .map((chart) => normalizeChart(chart))
+        .filter((chart): chart is DatasetChart => Boolean(chart)),
     },
   };
 };
@@ -343,24 +137,20 @@ const normalizeChatResponse = (response: ChatResponse): ChatResponse => {
 export const datasetApi = {
   getCurrent: async () => {
     const response = await request<unknown | null>("/api/datasets/current");
-    return response ? normalizeDatasetRecord(response) : null;
+    return normalizeDatasetRecord(response);
   },
-  upload: (payload: { fileName: string; csv: string }) => {
-    const formData = new FormData();
-    const blob = new Blob([payload.csv], { type: 'text/csv' });
-    formData.append('file', blob, payload.fileName);
-    
-    return fetch(`${API_BASE_URL}/api/datasets`, {
-      method: 'POST',
-      body: formData,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || `Upload failed with status ${response.status}`);
-      }
-      const data = (await response.json()) as unknown;
-      return normalizeDatasetRecord(data);
+  upload: async (payload: { fileName: string; csv: string }) => {
+    const response = await request<unknown>("/api/datasets", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
+
+    const dataset = normalizeDatasetRecord(response);
+    if (!dataset) {
+      throw new Error("Backend returned an invalid dataset payload");
+    }
+
+    return dataset;
   },
   clear: () =>
     request<{ success: boolean }>("/api/datasets/current", {
@@ -374,26 +164,18 @@ export const chatApi = {
     dataset: DatasetRecord,
     history: { role: "user" | "assistant"; content: string }[],
   ): Promise<ChatResponse> => {
-    analyticsTracker.trackFeature("chat_query", {
-      dataset: dataset.fileName,
-      queryLength: message.length,
+    const response = await request<ChatResponse>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        datasetId: dataset.id,
+        history,
+      }),
     });
 
-    try {
-      const response = await request<ChatResponse>("/api/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          message,
-          history,
-        }),
-      });
-      return normalizeChatResponse(response);
-    } catch (error) {
-      if (canUseLocalChatFallback(error)) {
-        return runLocalDatasetQuery(message, dataset);
-      }
-
-      throw error;
-    }
+    return {
+      ...response,
+      chart: normalizeChart(response.chart),
+    };
   },
 };

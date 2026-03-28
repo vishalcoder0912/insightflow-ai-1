@@ -1,77 +1,103 @@
 # InsightFlow AI
 
-AI-powered data analysis and visualization platform with natural language querying.
+CSV analytics and data visualization platform with a React frontend and a Node.js backend.
+
+## Stack
+
+- Frontend: React, Vite, Tailwind CSS, Recharts
+- Backend: Node.js ES modules
+- Database: PostgreSQL
+- AI: Gemini with fallback mode
 
 ## Project Structure
 
-```
+```text
 insightflow-ai/
-├── backend/              # Python FastAPI backend
-│   ├── app/
-│   │   ├── ai/           # AI/ML integrations (Gemini)
-│   │   ├── models/       # Data models
-│   │   ├── routers/      # API routes
-│   │   ├── services/     # Business logic
-│   │   ├── config.py     # Configuration
-│   │   └── main.py       # FastAPI app entry
-│   ├── data/             # Data storage
-│   └── requirements.txt
-├── frontend/             # React + Vite + TypeScript
-│   ├── src/
-│   │   ├── app/          # Routing and layout
-│   │   ├── features/     # Feature modules (chat, dashboard, upload)
-│   │   ├── shared/       # Reusable hooks, services, types
-│   │   ├── components/   # UI components (shadcn)
-│   │   └── ...
-│   └── ...
-├── docs/                 # Documentation
-│   ├── fixes/            # Fix summaries
-│   └── ...
-├── .env.example
-└── README.md
+|- backend/
+|  |- src/
+|  |  |- config/
+|  |  |- controllers/
+|  |  |- http/
+|  |  |- models/
+|  |  |- routes/
+|  |  |- services/
+|  |  |- storage/
+|  |  \- utils/
+|- frontend/
+|  \- src/
+|     |- app/
+|     |- features/
+|     |- shared/
+|     \- components/
+|- docs/
+|- .env.example
+\- README.md
 ```
 
 ## Quick Start
 
-### Backend (Python)
+1. Copy `.env.example` to `.env`
+2. Fill in your local PostgreSQL credentials
+3. Add a Gemini API key only if you want live Gemini responses
+
+Backend:
+
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+npm install
+npm run dev
 ```
 
-### Frontend (React)
+Frontend:
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
+From the repo root you can also run:
+
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
+
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Use a local `.env` file for secrets. `.env` is ignored by Git and must not be committed.
 
-**Backend:**
-- `PORT` - Server port (default: 8000)
-- `GEMINI_API_KEY` - Google Gemini API key for AI features
+Backend:
+
+- `PORT` - backend port, default `3001`
+- `DATABASE_URL` - PostgreSQL connection string
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - database overrides
+- `GEMINI_API_KEY` - optional Gemini API key
 - `GEMINI_MODEL` - Gemini model name
 
-**Frontend:**
-- `VITE_API_BASE_URL` - Backend API URL
+Frontend:
+
+- `VITE_API_BASE_URL` - optional backend base URL
 
 ## API Routes
 
-- `GET /health` - Health check
-- `POST /api/datasets` - Upload dataset
-- `GET /api/datasets/current` - Get current dataset
-- `DELETE /api/datasets/current` - Clear dataset
-- `POST /api/chat` - Chat with AI about data
+- `GET /health`
+- `POST /api/datasets`
+- `GET /api/datasets/current`
+- `DELETE /api/datasets/current`
+- `POST /api/chat`
 
 ## Features
 
-- CSV/Excel dataset upload and analysis
+- CSV dataset upload and preview
+- Interactive analyst dashboard with 5 chart types
 - Natural language data querying
-- AI-powered insights via Google Gemini
-- Interactive visualizations and dashboards
+- PostgreSQL-backed dataset persistence
+- Gemini integration with safe fallback responses
+
+## Git Safety
+
+- Keep real credentials only in `.env`
+- Commit only `.env.example`
+- Review `git diff` before pushing
+- Do not commit local logs or generated build artifacts

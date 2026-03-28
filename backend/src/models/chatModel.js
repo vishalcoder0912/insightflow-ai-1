@@ -5,7 +5,7 @@ const toChatMessageRecord = (row) => {
 
   return {
     id: row.id,
-    datasetId: row.datasetId,
+    datasetId: row.dataset_slug,
     message: row.message,
     answer: row.answer ?? "",
     sql: row.sql ?? "",
@@ -13,12 +13,12 @@ const toChatMessageRecord = (row) => {
     chart: row.chart ?? null,
     source: row.source ?? "gemini",
     createdAt:
-      row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+      row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   };
 };
 
 export const saveChatMessage = async (
-  datasetId,
+  datasetSlug,
   message,
   answer,
   sql,
@@ -29,26 +29,26 @@ export const saveChatMessage = async (
 ) => {
   const result = await query(
     `INSERT INTO chat_messages (
-      "datasetId",
+      dataset_slug,
       message,
       answer,
       sql,
       insights,
       chart,
       source
-    ) VALUES ($1, $2, $3, $4, $5::json, $6::json, $7)
+    ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
     RETURNING
       id,
-      "datasetId",
+      dataset_slug,
       message,
       answer,
       sql,
       insights,
       chart,
       source,
-      "createdAt"`,
+      created_at`,
     [
-      datasetId,
+      datasetSlug,
       message,
       answer ?? "",
       sql ?? "",
@@ -62,33 +62,33 @@ export const saveChatMessage = async (
   return toChatMessageRecord(result.rows[0]);
 };
 
-export const getChatHistory = async (datasetId, client) => {
+export const getChatHistory = async (datasetSlug, client) => {
   const result = await query(
     `SELECT
       id,
-      "datasetId",
+      dataset_slug,
       message,
       answer,
       sql,
       insights,
       chart,
       source,
-      "createdAt"
+      created_at
      FROM chat_messages
-     WHERE "datasetId" = $1
-     ORDER BY "createdAt" ASC, id ASC`,
-    [datasetId],
+     WHERE dataset_slug = $1
+     ORDER BY created_at ASC, id ASC`,
+    [datasetSlug],
     client,
   );
 
   return result.rows.map(toChatMessageRecord);
 };
 
-export const deleteChatHistory = async (datasetId, client) => {
+export const deleteChatHistory = async (datasetSlug, client) => {
   const result = await query(
     `DELETE FROM chat_messages
-     WHERE "datasetId" = $1`,
-    [datasetId],
+     WHERE dataset_slug = $1`,
+    [datasetSlug],
     client,
   );
 

@@ -1,69 +1,64 @@
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import dotenv from "dotenv";
-import { z } from "zod";
 
-const currentFilePath = fileURLToPath(import.meta.url);
-const currentDirPath = path.dirname(currentFilePath);
-const backendDirPath = path.resolve(currentDirPath, "../..");
-const projectRootEnvPath = path.resolve(backendDirPath, "../.env");
-const backendEnvPath = path.resolve(backendDirPath, ".env");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: projectRootEnvPath });
-dotenv.config({ path: backendEnvPath, override: false });
-dotenv.config();
+dotenv.config({
+  path: path.resolve(__dirname, "../../../.env"),
+  quiet: true,
+});
 
-const rawEnv = {
-  ...process.env,
-  DB_HOST: process.env.DB_HOST ?? process.env.PGHOST,
-  DB_PORT: process.env.DB_PORT ?? process.env.PGPORT,
-  DB_USER: process.env.DB_USER ?? process.env.PGUSER,
-  DB_PASSWORD: process.env.DB_PASSWORD ?? process.env.PGPASSWORD,
-  DB_NAME: process.env.DB_NAME ?? process.env.PGDATABASE,
-  DB_SSL: process.env.DB_SSL ?? process.env.PGSSL,
+const numberFromEnv = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const toBoolean = (value, fallback = false) => {
-  if (value === undefined || value === null || value === "") return fallback;
-  if (typeof value === "boolean") return value;
+const stringFromEnv = (value, fallback = "") => {
+  return typeof value === "string" ? value : fallback;
+};
 
-  const normalized = String(value).trim().toLowerCase();
-  if (["true", "1", "yes", "on", "require", "required"].includes(normalized)) return true;
-  if (["false", "0", "no", "off", "disable", "disabled"].includes(normalized)) return false;
-
+const booleanFromEnv = (value, fallback = false) => {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on", "require", "required"].includes(normalized)) return true;
+  if (["0", "false", "no", "off", "disable", "disabled"].includes(normalized)) return false;
   return fallback;
 };
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(3001),
-  CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  DATABASE_URL: z.string().optional().default(""),
-  DB_HOST: z.string().min(1).default("127.0.0.1"),
-  DB_PORT: z.coerce.number().int().positive().default(5432),
-  DB_USER: z.string().min(1).default("postgres"),
-  DB_PASSWORD: z.string().default("postgres"),
-  DB_NAME: z.string().min(1).default("insightflow_ai"),
-  DB_SSL: z.boolean().default(false),
-  DB_POOL_MIN: z.coerce.number().int().min(0).default(0),
-  DB_POOL_MAX: z.coerce.number().int().positive().default(10),
-  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
-  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-  GEMINI_API_KEY: z.string().optional().default(""),
-  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
-});
-
-const parsed = envSchema.safeParse({
-  ...rawEnv,
-  DB_SSL: toBoolean(rawEnv.DB_SSL, false),
-});
-
-if (!parsed.success) {
-  console.error("Invalid environment configuration", parsed.error.flatten().fieldErrors);
-  throw new Error("Environment validation failed.");
-}
-
-export const env = parsed.data;
+export const env = {
+  PORT: numberFromEnv(process.env.PORT, 3001),
+  NODE_ENV: stringFromEnv(process.env.NODE_ENV, "development"),
+  CORS_ORIGIN: stringFromEnv(process.env.CORS_ORIGIN, "http://localhost:5173,http://localhost:3001"),
+  DATABASE_URL: stringFromEnv(process.env.DATABASE_URL, ""),
+  DB_HOST: stringFromEnv(process.env.DB_HOST || process.env.PGHOST, "127.0.0.1"),
+  DB_PORT: numberFromEnv(process.env.DB_PORT || process.env.PGPORT, 5432),
+  DB_USER: stringFromEnv(process.env.DB_USER || process.env.PGUSER, "postgres"),
+  DB_PASSWORD: stringFromEnv(process.env.DB_PASSWORD || process.env.PGPASSWORD, "postgres"),
+  DB_NAME: stringFromEnv(process.env.DB_NAME || process.env.PGDATABASE, "insightflow_ai"),
+  DB_SSL: booleanFromEnv(process.env.DB_SSL || process.env.PGSSL, false),
+  DB_POOL_MIN: numberFromEnv(process.env.DB_POOL_MIN, 0),
+  DB_POOL_MAX: numberFromEnv(process.env.DB_POOL_MAX, 10),
+  DB_IDLE_TIMEOUT_MS: numberFromEnv(process.env.DB_IDLE_TIMEOUT_MS, 10000),
+  DB_CONNECTION_TIMEOUT_MS: numberFromEnv(process.env.DB_CONNECTION_TIMEOUT_MS, 5000),
+  GEMINI_API_KEY: stringFromEnv(process.env.GEMINI_API_KEY, ""),
+  GEMINI_MODEL: stringFromEnv(process.env.GEMINI_MODEL, "gemini-2.0-flash"),
+  GEMINI_API_URL: stringFromEnv(
+    process.env.GEMINI_API_URL,
+    "https://generativelanguage.googleapis.com/v1beta/models",
+  ),
+  LOG_LEVEL: stringFromEnv(process.env.LOG_LEVEL, "info"),
+  port: numberFromEnv(process.env.PORT, 3001),
+  nodeEnv: stringFromEnv(process.env.NODE_ENV, "development"),
+  corsOrigin: stringFromEnv(process.env.CORS_ORIGIN, "http://localhost:5173,http://localhost:3001"),
+  geminiApiKey: stringFromEnv(process.env.GEMINI_API_KEY, ""),
+  geminiModel: stringFromEnv(process.env.GEMINI_MODEL, "gemini-2.0-flash"),
+  geminiApiUrl: stringFromEnv(
+    process.env.GEMINI_API_URL,
+    "https://generativelanguage.googleapis.com/v1beta/models",
+  ),
+};
 
 export const resolvedDatabaseConfig = env.DATABASE_URL
   ? {
@@ -79,6 +74,12 @@ export const resolvedDatabaseConfig = env.DATABASE_URL
       ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
     };
 
-export const isGeminiConfigured =
-  Boolean(env.GEMINI_API_KEY) &&
-  !env.GEMINI_API_KEY.includes("<your_actual_key>");
+if (!env.DATABASE_URL) {
+  console.warn("DATABASE_URL not configured, using DB_HOST/DB_PORT/DB_USER/DB_NAME settings.");
+}
+
+if (!env.geminiApiKey) {
+  console.warn("GEMINI_API_KEY not configured, fallback mode enabled.");
+}
+
+console.log(`Configuration loaded [${env.nodeEnv}]`);
