@@ -1,41 +1,28 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import AppLayout from "@/app/layout/AppLayout";
-import NotFoundPage from "@/app/routes/NotFoundPage";
-import ChatPage from "@/features/chat/pages/ChatPage";
-import DashboardPage from "@/features/dashboard/pages/DashboardPage";
-import UploadPage from "@/features/upload/pages/UploadPage";
+import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
+import MainLayout from "./layout/MainLayout";
 import { DataProvider } from "@/shared/data/DataContext";
+import Dashboard from "@/features/dashboard/Dashboard";
+import ChatPage from "@/features/chat/ChatPage";
+import UploadPage from "@/features/upload/UploadPage";
 
-const queryClient = new QueryClient();
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <DataProvider>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/chat" element={<ChatPage />} />
-            </Route>
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </BrowserRouter>
-      </DataProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
-
-export default App;
+export default function App() {
+  return (
+    <DataProvider>
+      <Router
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <Routes>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </Router>
+    </DataProvider>
+  );
+}

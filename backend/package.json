@@ -1,15 +1,13 @@
 {
   "name": "insightflow-ai-backend",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js"
   },
   "dependencies": {
-    "dotenv": "^17.3.1",
-    "insightflow-ai": "file:..",
-    "mongoose": "^9.3.1"
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.3"
   }
 }

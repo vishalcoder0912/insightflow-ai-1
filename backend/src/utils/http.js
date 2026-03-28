@@ -22,17 +22,42 @@ export const methodNotAllowed = (res, allowedMethods) => {
   res.end(JSON.stringify({ error: "Method Not Allowed" }));
 };
 
+export const badRequest = (res, message) => {
+  json(res, 400, { error: message || "Bad Request" });
+};
+
 export const readJsonBody = async (req) => {
   const chunks = [];
 
-  for await (const chunk of req) {
-    chunks.push(chunk);
+  try {
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+
+    if (chunks.length === 0) {
+      return {};
+    }
+
+    const raw = Buffer.concat(chunks).toString("utf8");
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("Invalid JSON in request body");
+  }
+};
+
+export const requireMethod = (req, allowedMethods) => {
+  if (!allowedMethods.includes(req.method)) {
+    return { valid: false, allowedMethods };
   }
 
-  if (chunks.length === 0) {
-    return {};
+  return { valid: true };
+};
+
+export const requireContentType = (req, expectedType) => {
+  const contentType = req.headers["content-type"];
+  if (!contentType || !contentType.includes(expectedType)) {
+    return { valid: false, message: `Expected Content-Type: ${expectedType}` };
   }
 
-  const raw = Buffer.concat(chunks).toString("utf8");
-  return JSON.parse(raw);
+  return { valid: true };
 };

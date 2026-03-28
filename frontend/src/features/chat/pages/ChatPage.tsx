@@ -3,7 +3,7 @@ import ChatInterface from "@/features/chat/components/ChatInterface";
 export default function ChatPage() {
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-border bg-card/40 backdrop-blur">
         <h1 className="text-lg font-semibold text-foreground">AI Chat</h1>
         <p className="text-xs text-muted-foreground">Ask natural language questions about your data</p>
       </div>

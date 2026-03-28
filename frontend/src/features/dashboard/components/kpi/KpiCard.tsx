@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
 
@@ -9,7 +10,7 @@ interface KpiCardProps {
   icon: LucideIcon;
 }
 
-export default function KpiCard({ label, value, change, changeType = "neutral", icon: Icon }: KpiCardProps) {
+function KpiCard({ label, value, change, changeType = "neutral", icon: Icon }: KpiCardProps) {
   const changeColor = {
     positive: "text-chart-emerald",
     negative: "text-destructive",
@@ -20,7 +21,7 @@ export default function KpiCard({ label, value, change, changeType = "neutral", 
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card rounded-lg p-4 card-elevated"
+      className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shadow-sm transition-all hover:shadow-[0_0_25px_hsl(217_91%_60%_/_0.15)]"
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
@@ -33,3 +34,5 @@ export default function KpiCard({ label, value, change, changeType = "neutral", 
     </motion.div>
   );
 }
+
+export default memo(KpiCard);

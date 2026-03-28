@@ -1,53 +1,78 @@
-import { clearDataset, readDataset, saveDataset } from "../storage/datasetStore.js";
+import { saveDataset, readDataset, clearDataset } from "../storage/datasetStore.js";
 import { parseCsv, summarizeDataset } from "../utils/csv.js";
 
 const previewLimit = 100;
 
 export const storeDataset = async ({ csv, fileName }) => {
-  const parsed = parseCsv(csv);
-  const summary = summarizeDataset(parsed);
+  try {
+    const parsed = parseCsv(csv);
+    const summary = summarizeDataset(parsed);
 
-  const dataset = {
-    id: "current",
-    fileName,
-    uploadedAt: new Date().toISOString(),
-    headers: parsed.headers,
-    rows: parsed.rows,
-    totalRows: parsed.totalRows,
-    previewRows: parsed.rows.slice(0, previewLimit),
-    summary,
-  };
+    const dataset = {
+      id: "current",
+      fileName,
+      uploadedAt: new Date().toISOString(),
+      headers: parsed.headers,
+      rows: parsed.rows,
+      totalRows: parsed.totalRows,
+      previewRows: parsed.rows.slice(0, previewLimit),
+      summary,
+    };
 
-  await saveDataset(dataset);
+    await saveDataset(dataset);
 
-  return {
-    id: "current",
-    fileName: dataset.fileName,
-    uploadedAt: dataset.uploadedAt,
-    headers: dataset.headers,
-    totalRows: dataset.totalRows,
-    previewRows: dataset.previewRows,
-    summary: dataset.summary,
-  };
+    return {
+      id: dataset.id,
+      fileName: dataset.fileName,
+      uploadedAt: dataset.uploadedAt,
+      headers: dataset.headers,
+      totalRows: dataset.totalRows,
+      previewRows: dataset.previewRows,
+      summary: dataset.summary,
+    };
+  } catch (error) {
+    console.error("Error storing dataset:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to store dataset");
+  }
 };
 
 export const getCurrentDataset = async () => {
-  const dataset = await readDataset();
-  if (!dataset) return null;
+  try {
+    const dataset = await readDataset();
 
-  return {
-    id: "current",
-    fileName: dataset.fileName,
-    uploadedAt: dataset.uploadedAt,
-    headers: dataset.headers,
-    totalRows: dataset.totalRows,
-    previewRows: dataset.previewRows,
-    summary: dataset.summary,
-  };
+    if (!dataset) {
+      return null;
+    }
+
+    return {
+      id: dataset.id,
+      fileName: dataset.fileName,
+      uploadedAt: dataset.uploadedAt,
+      headers: dataset.headers,
+      totalRows: dataset.totalRows,
+      previewRows: dataset.previewRows,
+      summary: dataset.summary,
+    };
+  } catch (error) {
+    console.error("Error reading dataset:", error);
+    return null;
+  }
 };
 
-export const getDatasetForAnalysis = async () => readDataset();
+export const getDatasetForAnalysis = async () => {
+  try {
+    return await readDataset();
+  } catch (error) {
+    console.error("Error reading dataset for analysis:", error);
+    return null;
+  }
+};
 
 export const removeCurrentDataset = async () => {
-  await clearDataset();
+  try {
+    await clearDataset();
+  } catch (error) {
+    console.error("Error clearing dataset:", error);
+    throw new Error("Failed to remove dataset");
+  }
 };

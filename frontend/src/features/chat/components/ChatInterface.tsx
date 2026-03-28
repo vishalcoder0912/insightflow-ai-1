@@ -1,143 +1,174 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Sparkles, User, AlertCircle, RotateCcw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, RotateCcw, Send, Sparkles, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import ChatChartCard from "@/features/chat/components/ChatChartCard";
 import { useDataset } from "@/shared/data/DataContext";
 import { chatApi } from "@/shared/services/api";
-import type { DatasetChart } from "@/shared/types/dataset";
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
+import type { ChatChartPayload, ChatResponse, ChatTablePayload, DatasetChart } from "@/shared/types/dataset";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  isError?: boolean;       // FIX #7 — distinguish error bubbles visually
+  isError?: boolean;
   sql?: string;
-  chart?: DatasetChart | null;
+  chart?: ChatResponse["chart"];
+  table?: ChatTablePayload | null;
+  insights?: string[];
+  source?: string;
 }
 
-// ─── Stable ID generator (avoids Date.now() collision) ─────────────────────────
-
-let _counter = 0;
-const uid = () => `msg-${Date.now()}-${++_counter}`;
-
-// ─── Welcome message factory (dataset-aware) ────────────────────────────────────
+let counter = 0;
+const uid = () => `msg-${Date.now()}-${++counter}`;
 
 const buildWelcome = (hasDataset: boolean): Message => ({
   id: "welcome",
   role: "assistant",
   content: hasDataset
-    ? "Dataset loaded. Ask me anything about your data.\n\nTry: *\"What are the top 5 products by revenue?\"*"
-    : "Welcome to **InsightFlow AI**. Upload a dataset and ask a question about it.\n\nTry: *\"What are the top 5 products by revenue?\"*",
+    ? 'Dataset loaded. Ask me anything about your data.\n\nTry: *"What are the top 5 products by revenue?"*'
+    : "Welcome to **Chat**. Upload a dataset first.",
 });
 
-// ─── Chart renderer ─────────────────────────────────────────────────────────────
+const isChartPayload = (chart: Message["chart"]): chart is ChatChartPayload =>
+  Boolean(
+    chart &&
+    typeof chart === "object" &&
+    "rows" in chart &&
+    "chartType" in chart &&
+    Array.isArray(chart.rows),
+  );
 
-function ChartPreview({ chart }: { chart: DatasetChart }) {
-  // Renders a simple bar-style preview so the chart data is actually visible.
-  // Swap this out for Recharts / Chart.js if a full chart library is available.
-  const max = Math.max(...chart.data.map((d) => Number(d.value) || 0));
+const toChartPayload = (chart: Message["chart"]): ChatChartPayload | null => {
+  if (!chart || typeof chart !== "object") {
+    return null;
+  }
+
+  if (isChartPayload(chart)) {
+    return chart;
+  }
+
+  const datasetChart = chart as DatasetChart;
+  if (!Array.isArray(datasetChart.data) || !datasetChart.data.length) {
+    return null;
+  }
+
+  const xKey = datasetChart.xKey || "name";
+  const yKey = datasetChart.dataKey || "value";
+
+  return {
+    title: datasetChart.title || "Chart",
+    chartType: datasetChart.type || "bar",
+    xKey,
+    yKey,
+    rows: datasetChart.data.map((point, index) => {
+      const label = point[xKey] ?? point.name ?? point.label ?? `Item ${index + 1}`;
+      const value = Number(point[yKey] ?? point.value ?? point.y ?? 0);
+
+      return {
+        ...point,
+        [xKey]: String(label),
+        [yKey]: Number.isFinite(value) ? value : 0,
+        label: String(label),
+        value: Number.isFinite(value) ? value : 0,
+      };
+    }),
+    config: {
+      xLabel: datasetChart.xKey || "Category",
+      yLabel: datasetChart.dataKey || "Value",
+      showGrid: true,
+      showLegend: datasetChart.type === "pie",
+      curved: datasetChart.type === "line" || datasetChart.type === "area",
+    },
+  };
+};
+
+function ChartPreview({ chart, table }: { chart: Message["chart"]; table?: ChatTablePayload | null }) {
+  const payload = toChartPayload(chart);
+
+  if (!payload) {
+    return null;
+  }
 
   return (
-    <div className="mt-3 rounded-md border border-border p-3 space-y-2">
-      <p className="text-xs font-medium text-foreground">{chart.title}</p>
-      <p className="text-xs text-muted-foreground capitalize">{chart.type} chart · {chart.data.length} data points</p>
-      <div className="space-y-1.5 mt-2">
-        {chart.data.slice(0, 8).map((point, i) => {
-          const pct = max > 0 ? (Number(point.value) / max) * 100 : 0;
-          return (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-24 truncate shrink-0">{String(point.label ?? point.x ?? i)}</span>
-              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <span className="text-xs text-muted-foreground w-12 text-right shrink-0">{point.value}</span>
-            </div>
-          );
-        })}
-        {chart.data.length > 8 && (
-          <p className="text-xs text-muted-foreground">+{chart.data.length - 8} more rows</p>
-        )}
-      </div>
+    <div className="mt-4">
+      <ChatChartCard payload={payload} table={table} />
     </div>
   );
 }
 
-// ─── Main component ─────────────────────────────────────────────────────────────
-
 export default function ChatInterface() {
   const { dataset } = useDataset();
-
-  // FIX #6 — welcome message reflects whether a dataset is already loaded
-  const [messages, setMessages] = useState<Message[]>(() => [buildWelcome(!!dataset)]);
+  const [messages, setMessages] = useState<Message[]>(() => [buildWelcome(Boolean(dataset))]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  // FIX #5 — point ref at the bottom sentinel, not the scroll container
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // FIX #6 — update welcome message when dataset availability changes
   useEffect(() => {
-    setMessages((prev) => {
-      if (prev.length === 1 && prev[0].id === "welcome") {
-        return [buildWelcome(!!dataset)];
+    setMessages((current) => {
+      if (current.length === 1 && current[0].id === "welcome") {
+        return [buildWelcome(Boolean(dataset))];
       }
-      return prev;
+
+      return current;
     });
   }, [dataset]);
 
-  // ── Reset chat ─────────────────────────────────────────────────────────────
-
   const handleReset = useCallback(() => {
-    setMessages([buildWelcome(!!dataset)]);
+    setMessages([buildWelcome(Boolean(dataset))]);
     setInput("");
     inputRef.current?.focus();
   }, [dataset]);
 
-  // ── Send message ───────────────────────────────────────────────────────────
-
   const handleSend = useCallback(async () => {
-    // FIX #3 — unified guard used by both button and Enter key
-    if (!dataset || !input.trim() || isLoading) return;
+    if (!dataset || !input.trim() || isLoading) {
+      return;
+    }
 
-    const userMsg: Message = { id: uid(), role: "user", content: input.trim() };
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: input.trim(),
+    };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const history = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
+
+    setMessages((current) => [...current, userMsg]);
     setInput("");
     setIsLoading(true);
 
     try {
-      // FIX #1 — pass dataset so API has context
-      // FIX #4 — pass full conversation history for multi-turn memory
-      const history = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
       const resp = await chatApi.send(userMsg.content, dataset, history);
 
-      setMessages((prev) => [
-        ...prev,
+      const assistantMsg: Message = {
+        id: uid(),
+        role: "assistant",
+        content: resp.answer || "No answer available.",
+        sql: resp.sql || "",
+        chart: resp.chart || null,
+        table: resp.table || null,
+        insights: Array.isArray(resp.insights) ? resp.insights : [],
+        source: resp.source,
+      };
+
+      setMessages((current) => [...current, assistantMsg]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Chat request failed.";
+
+      setMessages((current) => [
+        ...current,
         {
           id: uid(),
           role: "assistant",
-          content: resp.answer,
-          sql: resp.sql,
-          chart: resp.chart,
+          content: errorMsg,
+          isError: true,
         },
-      ]);
-    } catch (error) {
-      // FIX #7 — error messages are flagged separately so UI can style them
-      const message = error instanceof Error ? error.message : "Chat request failed.";
-      setMessages((prev) => [
-        ...prev,
-        { id: uid(), role: "assistant", content: message, isError: true },
       ]);
     } finally {
       setIsLoading(false);
@@ -145,155 +176,154 @@ export default function ChatInterface() {
     }
   }, [dataset, input, isLoading, messages]);
 
-  // ── Enter key handler ──────────────────────────────────────────────────────
-
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      // FIX #3 — respect all disabled conditions before firing
-      if (e.key === "Enter" && !e.shiftKey && dataset && input.trim() && !isLoading) {
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter" && !event.shiftKey && dataset && input.trim() && !isLoading) {
         void handleSend();
       }
     },
-    [handleSend, dataset, input, isLoading],
+    [dataset, handleSend, input, isLoading],
   );
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
-    <div className="flex flex-col h-full">
-      {/* ── Message list ── */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+    <div className="flex h-full flex-col bg-background">
+      <div className="flex-1 space-y-4 overflow-auto p-4">
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
+          {messages.map((message) => (
             <motion.div
-              key={msg.id}
+              key={message.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
+              className={`flex gap-3 ${message.role === "user" ? "justify-end" : ""}`}
             >
-              {/* Assistant avatar */}
-              {msg.role === "assistant" && (
+              {message.role === "assistant" && (
                 <div
-                  className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${
-                    msg.isError ? "bg-destructive/15" : "bg-primary/15"
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                    message.isError ? "bg-destructive/15" : "bg-primary/15"
                   }`}
                 >
-                  {msg.isError ? (
-                    <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+                  {message.isError ? (
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                   ) : (
-                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
                   )}
                 </div>
               )}
 
-              {/* Bubble */}
               <div
                 className={`max-w-[75%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === "user"
+                  message.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : msg.isError
-                      // FIX #7 — error bubbles get distinct destructive styling
-                      ? "bg-destructive/10 border border-destructive/20 text-destructive"
-                      : "bg-card card-elevated text-card-foreground"
+                    : message.isError
+                      ? "border border-destructive/20 bg-destructive/10 text-destructive"
+                      : "bg-card text-card-foreground"
                 }`}
               >
                 <ReactMarkdown
                   components={{
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                     code: ({ children }) => (
-                      <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        {children}
+                      </code>
                     ),
-                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                    em: ({ children }) => <em className="text-muted-foreground italic">{children}</em>,
                   }}
                 >
-                  {msg.content}
+                  {message.content}
                 </ReactMarkdown>
 
-                {/* SQL block */}
-                {msg.sql && (
-                  <div className="mt-3 bg-muted rounded-md p-3">
-                    <p className="text-xs text-muted-foreground mb-1 font-medium">Generated SQL</p>
-                    <pre className="text-xs font-mono text-primary overflow-x-auto whitespace-pre-wrap">{msg.sql}</pre>
+                {message.sql && (
+                  <div className="mt-3 rounded-md bg-muted p-3">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">SQL</p>
+                    <pre className="overflow-x-auto whitespace-pre-wrap text-xs font-mono">
+                      {message.sql}
+                    </pre>
                   </div>
                 )}
 
-                {/* FIX #9 — render actual chart preview instead of just describing it */}
-                {msg.chart && <ChartPreview chart={msg.chart} />}
+                {message.insights && message.insights.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Insights
+                    </p>
+                    <div className="space-y-1.5">
+                      {message.insights.slice(0, 4).map((insight, index) => (
+                        <p key={`${message.id}-insight-${index}`} className="text-xs text-muted-foreground">
+                          • {insight}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {message.chart && <ChartPreview chart={message.chart} table={message.table} />}
+
+                {message.source && !message.isError && (
+                  <div className="mt-3 inline-flex rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {message.source === "gemini" ? "AI Analytics" : "Dataset Analytics"}
+                  </div>
+                )}
               </div>
 
-              {/* User avatar */}
-              {msg.role === "user" && (
-                <div className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-secondary-foreground" />
+              {message.role === "user" && (
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary">
+                  <User className="h-3.5 w-3.5" />
                 </div>
               )}
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Typing indicator */}
         {isLoading && (
           <div className="flex gap-3">
-            <div className="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse-glow" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15">
+              <Sparkles className="h-3.5 w-3.5 animate-spin text-primary" />
             </div>
-            <div className="bg-card card-elevated rounded-lg px-4 py-3">
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse"
-                    style={{ animationDelay: `${i * 200}ms` }}
-                  />
-                ))}
-              </div>
+            <div className="flex gap-1 rounded-lg bg-card px-4 py-3">
+              {[0, 1, 2].map((index) => (
+                <div
+                  key={index}
+                  className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
+                  style={{ animationDelay: `${index * 200}ms` }}
+                />
+              ))}
             </div>
           </div>
         )}
 
-        {/* FIX #5 — bottom sentinel for reliable scroll-to-bottom */}
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Input bar ── */}
-      <div className="p-4 border-t border-border">
+      <div className="border-t border-border bg-background p-4">
         <div className="flex gap-2">
-          {/* FIX #8 — reset / new chat button */}
           {messages.length > 1 && (
             <button
               onClick={handleReset}
               disabled={isLoading}
-              title="Reset chat"
-              className="rounded-lg border border-border bg-card px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+              className="rounded-lg border border-border bg-card px-3 py-2.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="h-4 w-4" />
             </button>
           )}
 
           <input
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              dataset
-                ? "Ask about your data…"
-                : "Upload a dataset before asking questions"
-            }
+            placeholder="Ask about your data"
             disabled={!dataset || isLoading}
-            // FIX #10 — tooltip on disabled state
-            title={!dataset ? "Upload a dataset first to start chatting" : undefined}
-            className="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
 
           <button
-            onClick={() => { void handleSend(); }}
+            onClick={() => {
+              void handleSend();
+            }}
             disabled={!dataset || !input.trim() || isLoading}
-            title={!dataset ? "Upload a dataset first" : "Send message"}
-            className="bg-primary text-primary-foreground rounded-lg px-4 py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-lg bg-primary px-4 py-2.5 text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            <Send className="w-4 h-4" />
+            <Send className="h-4 w-4" />
           </button>
         </div>
       </div>

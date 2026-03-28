@@ -1,15 +1,24 @@
 {
   "name": "insightflow-ai",
+  "version": "1.0.0",
   "private": true,
-  "devDependencies": {
-    "concurrently": "^9.2.1"
-  },
   "scripts": {
+    "dev": "concurrently -k -n frontend,backend -c cyan,green \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:backend": "npm --prefix backend run dev",
     "dev": "cd frontend && npx vite --host ::",
     "dev:frontend": "npm --prefix frontend run dev",
+    "install:frontend": "npm --prefix frontend install",
+    "install:backend": "npm --prefix backend install",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "build": "npm run build:frontend",
     "build:frontend": "npm --prefix frontend run build",
     "test:frontend": "npm --prefix frontend run test",
     "lint:frontend": "npm --prefix frontend run lint",
-    "dev:backend": "node backend/src/index.js"
+    "start": "concurrently -k -n frontend,backend -c cyan,green \"npm run start:frontend\" \"npm run start:backend\"",
+    "start:backend": "npm --prefix backend run start",
+    "start:frontend": "npm --prefix frontend run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

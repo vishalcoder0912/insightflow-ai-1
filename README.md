@@ -1,46 +1,85 @@
 # InsightFlow AI
 
-## Project structure
+CSV analytics and data visualization platform with a React frontend and a Node.js backend.
 
-`frontend/` contains the React + Vite application.
+## Stack
 
-`backend/` contains the Node API for dataset upload, persistence, summarization, and chat analysis.
+- Frontend: React, Vite, Tailwind CSS, Recharts
+- Backend: Node.js ES modules
+- Database: PostgreSQL
+- AI: Gemini with fallback mode
 
-## Frontend structure
+## Project Structure
 
-`frontend/src/app` contains routing and layout.
+```text
+insightflow-ai/
+|- backend/
+|  |- src/
+|  |  |- config/
+|  |  |- controllers/
+|  |  |- http/
+|  |  |- models/
+|  |  |- routes/
+|  |  |- services/
+|  |  |- storage/
+|  |  \- utils/
+|- frontend/
+|  \- src/
+|     |- app/
+|     |- features/
+|     |- shared/
+|     \- components/
+|- docs/
+|- .env.example
+\- README.md
+```
 
-`frontend/src/features` contains feature modules such as chat, dashboard, and upload.
+## Quick Start
 
-`frontend/src/shared` contains reusable hooks, services, types, and utility helpers.
+1. Copy `.env.example` to `.env`
+2. Fill in your local PostgreSQL credentials
+3. Add a Gemini API key only if you want live Gemini responses
 
-`frontend/src/components/ui` contains the shared shadcn UI layer.
+Backend:
 
-## Top-level commands
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-`npm run dev:frontend`
+Frontend:
 
-`npm run build:frontend`
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-`npm run dev:backend`
+From the repo root you can also run:
 
-## Environment
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
 
-Use [.env.example](c:/Users/VISHAL/Desktop/20-12-2025/All_full_stack_preparation/New%20folder/insightflow-ai/.env.example) as the starting point.
+## Environment Variables
 
-Backend variables:
+Use a local `.env` file for secrets. `.env` is ignored by Git and must not be committed.
 
-- `PORT`
-- `CORS_ORIGIN`
-- `MONGODB_URI`
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL`
+Backend:
 
-Frontend variables:
+- `PORT` - backend port, default `3001`
+- `DATABASE_URL` - PostgreSQL connection string
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - database overrides
+- `GEMINI_API_KEY` - optional Gemini API key
+- `GEMINI_MODEL` - Gemini model name
 
-- `VITE_API_BASE_URL`
+Frontend:
 
-## API routes
+- `VITE_API_BASE_URL` - optional backend base URL
+
+## API Routes
 
 - `GET /health`
 - `POST /api/datasets`
@@ -48,6 +87,17 @@ Frontend variables:
 - `DELETE /api/datasets/current`
 - `POST /api/chat`
 
-If `GEMINI_API_KEY` is missing, the backend still works and returns deterministic fallback analysis based on dataset summaries.
+## Features
 
-For local development, leave `VITE_API_BASE_URL` empty so frontend requests go through the Vite proxy and avoid LAN CORS issues.
+- CSV dataset upload and preview
+- Interactive analyst dashboard with 5 chart types
+- Natural language data querying
+- PostgreSQL-backed dataset persistence
+- Gemini integration with safe fallback responses
+
+## Git Safety
+
+- Keep real credentials only in `.env`
+- Commit only `.env.example`
+- Review `git diff` before pushing
+- Do not commit local logs or generated build artifacts

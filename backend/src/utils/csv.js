@@ -13,6 +13,7 @@ const splitCsvLine = (line) => {
         index += 1;
         continue;
       }
+
       inQuotes = !inQuotes;
       continue;
     }
@@ -44,9 +45,7 @@ export const parseCsv = (csvText) => {
   }
 
   const headers = rows[0];
-  const dataRows = rows
-    .slice(1)
-    .map((row) => headers.map((_, index) => row[index] ?? ""));
+  const dataRows = rows.slice(1).map((row) => headers.map((_, index) => row[index] ?? ""));
 
   return {
     headers,
@@ -62,6 +61,7 @@ const isNumeric = (value) => {
 
 export const summarizeDataset = (dataset) => {
   const { headers, rows } = dataset;
+
   const columnStats = headers.map((header, index) => {
     const values = rows.map((row) => row[index]).filter((value) => value !== "");
     const numericValues = values.filter(isNumeric).map(Number);
@@ -97,7 +97,6 @@ export const summarizeDataset = (dataset) => {
   const categoricalColumns = columnStats.filter((column) => !column.numeric);
   const primaryMetric = numericColumns[0] || null;
   const primaryCategory = categoricalColumns[0] || null;
-
   const insights = [];
 
   if (primaryMetric) {
@@ -115,6 +114,7 @@ export const summarizeDataset = (dataset) => {
       const key = row[headers.indexOf(primaryCategory.name)] || "Unknown";
       counts.set(key, (counts.get(key) || 0) + 1);
     });
+
     const topValues = [...counts.entries()]
       .sort((left, right) => right[1] - left[1])
       .slice(0, 3);
@@ -145,21 +145,28 @@ export const summarizeDataset = (dataset) => {
       title: `${primaryMetric.name} by ${primaryCategory.name}`,
       type: "bar",
       dataKey: "value",
-      data: [...grouped.entries()].slice(0, 8).map(([name, value]) => ({
-        name,
-        value: Number(value.toFixed(2)),
-      })),
+      data: [...grouped.entries()]
+        .slice(0, 8)
+        .map(([name, value]) => ({
+          name: String(name),
+          value: Number(value.toFixed(2)),
+          x: String(name),
+          label: String(name),
+        })),
     });
   }
 
   if (primaryMetric) {
+    const metricIndex = headers.indexOf(primaryMetric.name);
     chartSuggestions.push({
-      title: `${primaryMetric.name} distribution preview`,
+      title: `${primaryMetric.name} Distribution`,
       type: "line",
       dataKey: "value",
       data: rows.slice(0, 12).map((row, index) => ({
         name: `Row ${index + 1}`,
-        value: Number(row[headers.indexOf(primaryMetric.name)] || 0),
+        value: Number(row[metricIndex] || 0),
+        x: `Row ${index + 1}`,
+        label: `Row ${index + 1}`,
       })),
     });
   }

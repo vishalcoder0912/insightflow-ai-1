@@ -1,22 +1,61 @@
-import { DatasetModel } from "./models/DatasetModel.js";
+import {
+  createDataset,
+  deleteDataset,
+  getCurrentDataset as getCurrentDatasetRecord,
+} from "../models/datasetModel.js";
+import { connectToDatabase } from "./database.js";
 
-const CURRENT_DATASET_SLUG = "current";
+export const saveDataset = async (dataset) => {
+  try {
+    await connectToDatabase();
 
-export const saveDataset = async (dataset) =>
-  DatasetModel.findOneAndUpdate(
-    { slug: CURRENT_DATASET_SLUG },
-    { ...dataset, slug: CURRENT_DATASET_SLUG },
-    {
-      upsert: true,
-      setDefaultsOnInsert: true,
-      returnDocument: "after",
-      lean: true,
-    },
-  );
+    const existing = await getCurrentDatasetRecord();
+    if (existing?.id) {
+      await deleteDataset(existing.id);
+    }
 
-export const readDataset = async () =>
-  DatasetModel.findOne({ slug: CURRENT_DATASET_SLUG }).lean();
+    return await createDataset(dataset);
+  } catch (error) {
+    console.error("Error saving dataset:", error);
+    throw new Error("Failed to save dataset to database");
+  }
+};
+
+export const readDataset = async () => {
+  try {
+    await connectToDatabase();
+
+    const record = await getCurrentDatasetRecord();
+    if (!record) {
+      return null;
+    }
+
+    return {
+      id: String(record.id),
+      fileName: record.fileName,
+      uploadedAt: record.uploadedAt,
+      headers: record.headers,
+      rows: record.rows,
+      totalRows: record.totalRows,
+      previewRows: record.previewRows,
+      summary: record.summary,
+    };
+  } catch (error) {
+    console.error("Error reading dataset:", error);
+    throw new Error("Failed to read dataset from database");
+  }
+};
 
 export const clearDataset = async () => {
-  await DatasetModel.deleteOne({ slug: CURRENT_DATASET_SLUG });
+  try {
+    await connectToDatabase();
+
+    const existing = await getCurrentDatasetRecord();
+    if (existing?.id) {
+      await deleteDataset(existing.id);
+    }
+  } catch (error) {
+    console.error("Error clearing dataset:", error);
+    throw new Error("Failed to clear dataset from database");
+  }
 };

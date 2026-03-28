@@ -10,6 +10,7 @@ export interface DatasetColumnSummary {
   unique: number;
   sampleValues: string[];
   numeric: boolean;
+  detectedType?: string;
   min?: number;
   max?: number;
   average?: number;
@@ -25,16 +26,18 @@ export interface DatasetKpi {
 export interface DatasetChart {
   title: string;
   type: "bar" | "line" | "pie" | "area" | "scatter";
+  xKey?: string;
   dataKey: string;
-  data: Array<{ name: string; value: number; x?: any; label?: any }>;
-}
+
 
 export interface DatasetSummary {
   rowCount: number;
   columnCount: number;
+  domain?: DatasetDomainSummary;
   columns: DatasetColumnSummary[];
   kpis: DatasetKpi[];
   insights: string[];
+  advancedInsights?: AdvancedInsights;
   chartSuggestions: DatasetChart[];
 }
 
@@ -52,11 +55,54 @@ export interface ChatResponse {
   answer: string;
   sql: string;
   insights: string[];
-  chart: DatasetChart | null;
-  source: "gemini" | "fallback";
-  dataset: {
-    fileName: string;
-    totalRows: number;
-    headers: string[];
+  responseType?: ChatResponseType;
+  chart?: ChatChartPayload | DatasetChart | null;
+  table?: ChatTablePayload | null;
+  meta?: {
+    queryIntent?: string;
+    derivedFrom?: string;
+    filterKeyword?: string;
+    confidence?: number;
+    rows_returned?: number;
+    sql_source?: string;
+    [key: string]: unknown;
   };
+  source: string;
+  dataset: {
+    fileName?: string;
+    totalRows?: number;
+    headers?: string[];
+    schema?: string;
+    columns?: string[];
+    [key: string]: unknown;
+  };
+}
+
+export type ChatResponseType =
+  | "text"
+  | "table"
+  | "chart"
+  | "text+chart"
+  | "text+table"
+  | "text+chart+table";
+
+export interface ChatChartPayload {
+  title: string;
+  chartType: "bar" | "line" | "pie" | "area" | "scatter";
+  xKey: string;
+  yKey: string;
+  rows: Array<Record<string, string | number>>;
+  config?: {
+    xLabel?: string;
+    yLabel?: string;
+    palette?: string;
+    showGrid?: boolean;
+    showLegend?: boolean;
+    curved?: boolean;
+  };
+}
+
+export interface ChatTablePayload {
+  columns: string[];
+  rows: Array<Record<string, string | number>>;
 }
